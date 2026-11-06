@@ -37,29 +37,3 @@ Mọi mức tiền sửa được ở trang **Cài đặt**; người được h
 Sau khi xác nhận lương, trang Tuần lương hiện mã VietQR cho từng người, đã cố định số tiền và nội dung.
 Quét bằng app ngân hàng, kiểm tra tên người nhận, rồi bấm **Đánh dấu đã chuyển**.
 File `BangLuong_…xlsx` có thêm sheet **QR chuyển khoản**. File `DanhSachThanhToan_…xlsx` giữ nguyên để tải lên ngân hàng.
-
-## Cập nhật phần mềm
-
-App tự kiểm tra GitHub Releases khi mở và mỗi 6 giờ, tải bản mới ngầm, rồi hiện nút **Khởi động lại & cập nhật**.
-Dữ liệu ở `%APPDATA%\Tinh Luong` giữ nguyên.
-
-Đăng một bản mới:
-
-1. Sửa code, chạy `npm test`.
-2. Tăng `version` trong `package.json` (vd. `1.2.0`), commit, rồi:
-   ```
-   git tag v1.2.0
-   git push origin main --tags
-   ```
-3. GitHub Actions (`.github/workflows/build.yml`) chạy test trên Windows, build `TinhLuong-Setup-1.2.0.exe` và đăng lên Releases.
-
-Mỗi lần đẩy lên `main` (không có tag), Actions chỉ test và build thử; bộ cài nằm ở mục **Artifacts** của lần chạy đó.
-
-## Phát triển trên máy
-
-```
-npm install
-npm start          # chạy thử
-npm test           # 11 bài kiểm tra: tính lương, chuyên cần, xuất file, VietQR, Google Sheet
-npm run dist       # build bộ cài Windows vào dist/ (chạy trên Windows)
-```
