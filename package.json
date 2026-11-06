@@ -1,0 +1,83 @@
+{
+  "name": "tinh-luong",
+  "productName": "Tinh Luong",
+  "version": "1.1.0",
+  "description": "Ứng dụng tính lương tuần cho quán",
+  "main": "main.js",
+  "author": "Gia Khanh",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "bundle": "node build/bundle.js",
+    "dist": "node build/bundle.js && electron-builder --win nsis --x64 --publish never",
+    "release": "node build/bundle.js && electron-builder --win nsis --x64 --publish always"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8",
+    "electron-updater": "^6.3.9",
+    "esbuild": "^0.24.0",
+    "exceljs": "4.4.0",
+    "papaparse": "5.4.1",
+    "qrcode": "^1.5.4",
+    "resedit": "^2.0.3",
+    "sql.js": "1.12.0"
+  },
+  "build": {
+    "appId": "vn.quan.tinhluong",
+    "productName": "Tinh Luong",
+    "copyright": "Gia Khanh",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "app/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/mau_thanh_toan.xlsx",
+        "to": "mau_thanh_toan.xlsx"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Tính lương",
+      "artifactName": "TinhLuong-Setup-${version}.exe",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "afterPack": "build/afterPack.js",
+    "extraMetadata": {
+      "main": "app/main.js"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "dinox16",
+        "repo": "Payments-RooftopBar-DragonBall",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dinox16/Payments-RooftopBar-DragonBall.git"
+  }
+}
