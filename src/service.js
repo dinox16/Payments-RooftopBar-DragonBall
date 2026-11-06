@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { normalizeShift, fmt, stripAccents } = require('./time');
 const { addDays, fridayOf, weekDays, dmy, todayIso } = require('./dates');
-const { matrixToEntries, fetchPublicCsv, fetchWithServiceAccount, readLocalFile } = require('./sheet');
+const { matrixToEntries, fetchPublicCsv, fetchWithServiceAccount, readLocalFile, readTips, parseNumber } = require('./sheet');
 const { calculateWeek, attendanceFor } = require('./engine');
 const X = require('./export');
 const QRCode = require('qrcode');
@@ -203,6 +203,7 @@ class PayrollService {
     const byName = new Map(emps.map((e) => [keyName(e.sheet_name), e]));
     const days = weekDays(w.week_start);
     const unknown = [];
+    const tipWarnings = [];
     let count = 0;
     const raw = JSON.stringify(matrix);
     this.db.tx(() => {
@@ -221,11 +222,35 @@ class PayrollService {
           count++;
         }
       }
+      // Tip từng ngày (ô cấu hình trong Cài đặt); không ghi đè tip đã sửa tay
+      const unit = Number(s.tip_unit) || 1000;
+      const tips = readTips(matrix, s.tip_cells);
+      for (const [code, t] of Object.entries(tips)) {
+        const ex = this.db.get('SELECT source FROM week_tips WHERE work_week_id=? AND day_code=?', [w.id, code]);
+        if (ex && ex.source === 'manual') continue;
+        if (Number.isNaN(t.value)) { tipWarnings.push(`Ô ${t.ref} không phải số: "${t.raw}"`); continue; }
+        this.db.run("INSERT INTO week_tips(work_week_id, day_code, amount, raw_value, source) VALUES (?,?,?,?,'sheet') ON CONFLICT(work_week_id, day_code) DO UPDATE SET amount=excluded.amount, raw_value=excluded.raw_value, source='sheet'", [w.id, code, Math.round(t.value * unit), t.raw]);
+      }
       if (link) this.db.run('UPDATE work_weeks SET sheet_link=? WHERE id=?', [link, w.id]);
       this.invalidateDraft(w.id);
       this.db.run("UPDATE work_weeks SET status='synced' WHERE id=?", [w.id]);
     });
-    return { imported: entries.length - unknown.length, unknown, week: this.getWeek(friday) };
+    return { imported: entries.length - unknown.length, unknown, tipWarnings, week: this.getWeek(friday) };
+  }
+
+  /** Sửa tip của 1 ngày (theo đơn vị trên sheet, vd. 500 = 500.000đ); để trống = lấy lại từ sheet ở lần đồng bộ sau. */
+  setTip(friday, dayCode, value) {
+    const w = this.ensureWeek(friday); this.assertEditable(w);
+    const unit = Number(this.db.getSettings().tip_unit) || 1000;
+    if (value === '' || value === null || value === undefined) {
+      this.db.run("UPDATE week_tips SET source='sheet' WHERE work_week_id=? AND day_code=?", [w.id, dayCode]);
+    } else {
+      const n = parseNumber(value);
+      if (Number.isNaN(n) || n < 0) throw new Error('Tip phải là số');
+      this.db.run("INSERT INTO week_tips(work_week_id, day_code, amount, raw_value, source) VALUES (?,?,?,?,'manual') ON CONFLICT(work_week_id, day_code) DO UPDATE SET amount=excluded.amount, raw_value=excluded.raw_value, source='manual'", [w.id, dayCode, Math.round(n * unit), String(value)]);
+    }
+    this.invalidateDraft(w.id);
+    return this.getWeek(friday);
   }
 
   /** Thêm nhân viên từ các tên lạ trên sheet rồi đọc lại lần đồng bộ gần nhất của tuần. */
@@ -299,7 +324,16 @@ class PayrollService {
     const run = this.db.get("SELECT * FROM payroll_runs WHERE work_week_id=? AND status IN ('draft','final') ORDER BY id DESC LIMIT 1", [w.id]);
     const exports = run ? this.db.all('SELECT * FROM payroll_exports WHERE payroll_run_id=?', [run.id]) : [];
     const lastImport = this.db.get('SELECT source, imported_at FROM sheet_imports WHERE work_week_id=? ORDER BY id DESC LIMIT 1', [w.id]);
-    return { week: w, days, rows, run: run ? this.loadRun(run.id) : null, exports, lastImport, settings: { sheet_link: w.sheet_link || this.db.getSettings().sheet_link } };
+    const st = this.db.getSettings();
+    const unit = Number(st.tip_unit) || 1000;
+    const tipRows = this.db.all('SELECT day_code, amount, source FROM week_tips WHERE work_week_id=?', [w.id]);
+    const tips = days.map((d) => {
+      const t = tipRows.find((x) => x.day_code === d.code);
+      const workers = rows.filter((r) => r.cells[d.code].status === 'worked').length;
+      const amount = t ? t.amount : 0;
+      return { code: d.code, label: d.label, date: d.date, amount, value: amount / unit, source: t ? t.source : null, workers, share: workers ? Math.round(amount / unit / workers) * unit : 0 };
+    });
+    return { week: w, days, rows, tips, tipUnit: unit, tipCells: st.tip_cells, run: run ? this.loadRun(run.id) : null, exports, lastImport, settings: { sheet_link: w.sheet_link || st.sheet_link } };
   }
 
   // ---------- Tính lương ----------
@@ -348,7 +382,13 @@ class PayrollService {
       attendanceByEmp[e.id] = res;
       if (!withShifts.includes(e) && (res.status === 'eligible' || res.status === 'lost')) withShifts.push(e);
     }
-    return { employees: withShifts.sort((a, b) => a.sheet_name.localeCompare(b.sheet_name, 'vi')), shiftsByEmp, eventsByShift, rules, allowanceTypes, assignments, ratesByEmp, attendanceByEmp };
+    const unit = Number(this.db.getSettings().tip_unit) || 1000;
+    const tips = {};
+    for (const t of this.db.all('SELECT day_code, amount FROM week_tips WHERE work_week_id=?', [w.id])) {
+      const d = weekDays(w.week_start).find((x) => x.code === t.day_code);
+      tips[d.date] = { amount: t.amount, unit };
+    }
+    return { employees: withShifts.sort((a, b) => a.sheet_name.localeCompare(b.sheet_name, 'vi')), shiftsByEmp, eventsByShift, rules, allowanceTypes, assignments, ratesByEmp, attendanceByEmp, tips };
   }
 
   calculate(friday) {

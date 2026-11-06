@@ -33,5 +33,5 @@ test('service account: ký JWT, chọn đúng tab theo gid', async () => {
   };
   const m = await fetchWithServiceAccount(LINK, keyFile, f);
   assert.equal(m[2][0], 'Chi');
-  assert.match(decodeURIComponent(calls[2]), /'Tuần 06\/11'!A1:I300/);
+  assert.match(decodeURIComponent(calls[2]), /'Tuần 06\/11'!A1:Z300/);
 });

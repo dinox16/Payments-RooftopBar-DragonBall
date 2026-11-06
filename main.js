@@ -11,7 +11,7 @@ let win;
 const ALLOWED = new Set([
   'getSettings', 'saveSettings', 'listEmployees', 'saveEmployee', 'deleteEmployee', 'listBanks',
   'getWeek', 'setWeekClosed', 'syncFromGoogle', 'importFile', 'setShiftManual', 'setEvent',
-  'calculate', 'preflight', 'confirm', 'unlock', 'history', 'importAccounts', 'exportAccountTemplate', 'transferQrs', 'markPaid', 'addEmployeesAndReimport',
+  'calculate', 'preflight', 'confirm', 'unlock', 'history', 'importAccounts', 'exportAccountTemplate', 'transferQrs', 'markPaid', 'addEmployeesAndReimport', 'setTip',
 ]);
 
 function dataDir() { return app.getPath('userData'); }
@@ -121,7 +121,7 @@ ipcMain.handle('checkUpdate', async () => {
   return { ...updateState, enabled: true };
 });
 ipcMain.handle('installUpdate', async () => {
-  if (updater && updateState.status === 'downloaded') { log('installing update', updateState.version); setImmediate(() => updater.quitAndInstall(false, true)); }
+  if (updater && updateState.status === 'downloaded') { log('installing update', updateState.version); setImmediate(() => updater.quitAndInstall(true, true)); }
   return true;
 });
 

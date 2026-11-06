@@ -143,6 +143,16 @@ CREATE TABLE IF NOT EXISTS attendance_periods (
   UNIQUE (employee_id, cycle_start)
 );
 
+CREATE TABLE IF NOT EXISTS week_tips (
+  id           INTEGER PRIMARY KEY,
+  work_week_id INTEGER NOT NULL REFERENCES work_weeks(id) ON DELETE CASCADE,
+  day_code     TEXT NOT NULL CHECK (day_code IN ('FRI','SAT','SUN')),
+  amount       INTEGER NOT NULL,             -- đồng
+  raw_value    TEXT,
+  source       TEXT NOT NULL DEFAULT 'sheet' CHECK (source IN ('sheet','manual')),
+  UNIQUE (work_week_id, day_code)
+);
+
 CREATE TABLE IF NOT EXISTS banks (
   id    INTEGER PRIMARY KEY,
   name  TEXT NOT NULL UNIQUE,
@@ -198,6 +208,8 @@ const DEFAULT_SETTINGS = {
   export_folder: '',
   remark_format: 'Luong tuan {tu}-{den}',
   first_data_row: '3',
+  tip_cells: 'K15,L15,M15',        // ô tổng tip T6, T7, CN trên sheet
+  tip_unit: '1000',                // 1 trên sheet = 1.000đ
 };
 
 class Database {
@@ -222,6 +234,9 @@ class Database {
     // Bản 1.1: mã BIN cho VietQR và đánh dấu đã chuyển tiền
     this.addColumn('banks', 'bin', 'TEXT');
     this.addColumn('payroll_items', 'paid_at', 'TEXT');
+    // Bản 1.2: cài đặt tip cho database cũ
+    this.raw.run("INSERT OR IGNORE INTO app_settings(key,value) VALUES ('tip_cells','K15,L15,M15')");
+    this.raw.run("INSERT OR IGNORE INTO app_settings(key,value) VALUES ('tip_unit','1000')");
     if (isNew || !this.get('SELECT 1 AS x FROM pay_rules LIMIT 1')) this.seed();
     this.raw.exec('PRAGMA foreign_keys = ON;');
     this.save();

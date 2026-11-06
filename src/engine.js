@@ -69,6 +69,17 @@ function calculateWeek(input) {
   const { employees, shiftsByEmp, eventsByShift, rules, allowanceTypes, assignments, ratesByEmp, attendanceByEmp } = input;
   const items = [];
   const issues = [];
+  // Tip: tổng tip của ngày chia đều cho những người đi làm hôm đó, làm tròn theo đơn vị của sheet (nghìn đồng: 38,5 → 39)
+  const tipShare = {};
+  const tipInfo = [];
+  for (const [date, t] of Object.entries(input.tips || {})) {
+    if (!t || !(t.amount > 0)) continue;
+    const workers = Object.values(shiftsByEmp).filter((list) => list.some((s) => s.work_date === date && s.status === 'worked')).length;
+    const unit = t.unit || 1000;
+    const share = workers ? Math.round(t.amount / unit / workers) * unit : 0;
+    tipShare[date] = { share, workers, amount: t.amount };
+    tipInfo.push({ date, amount: t.amount, workers, share });
+  }
   for (const emp of employees) {
     const shifts = (shiftsByEmp[emp.id] || []).slice().sort((a, b) => a.work_date.localeCompare(b.work_date));
     const assigned = assignments[emp.id] || {};
@@ -118,6 +129,11 @@ function calculateWeek(input) {
         lines.push({ shiftId: s.id, date: s.work_date, code: e.code, description: `${day} ${t.name.toLowerCase()}${qty > 1 ? ` × ${qty}` : ''}`, quantity: qty, unit: t.default_amount, amount: qty * t.default_amount });
       }
     }
+    for (const s of shifts) {
+      const t = tipShare[s.work_date];
+      if (s.status !== 'worked' || !t || !t.share) continue;
+      lines.push({ shiftId: s.id, date: s.work_date, code: 'TIP', description: `${DAY_LABEL[s.day_code]} ${dm(s.work_date)} tip: ${money(t.amount)} chia ${t.workers} người`, quantity: 1, unit: t.share, amount: t.share });
+    }
     const att = attendanceByEmp && attendanceByEmp[emp.id];
     if (att) {
       if (att.status === 'eligible') lines.push({ shiftId: null, date: att.cycleEnd, code: 'ATTENDANCE', description: `Chuyên cần chu kỳ ${dm(att.cycleStart)}–${dm(att.cycleEnd)} (nghỉ ${att.absent} ngày)`, quantity: 1, unit: att.amount, amount: att.amount });
@@ -130,7 +146,7 @@ function calculateWeek(input) {
   // gộp cảnh báo trùng
   const seen = new Set();
   const uniq = issues.filter((i) => { const k = i.employeeId + i.message; if (seen.has(k)) return false; seen.add(k); return true; });
-  return { items, issues: uniq, totalAmount: items.reduce((a, i) => a + i.totalAmount, 0) };
+  return { items, issues: uniq, tips: tipInfo, totalAmount: items.reduce((a, i) => a + i.totalAmount, 0) };
 }
 
 /** Cộng dồn theo mã khoản cho bảng tổng hợp. */

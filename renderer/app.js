@@ -14,7 +14,7 @@ const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDa
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const fridayOf = (iso) => { const dow = new Date(iso + 'T00:00:00Z').getUTCDay(); return addDays(iso, -((dow - 5 + 7) % 7)); };
 
-const CODE_NAME = { BASE: 'Lương giờ', NIGHT: 'Ca 22h30–24h', MEAL: 'Tiền ăn', FUEL: 'Tiền xăng', FIXED_DAILY: 'Cộng cố định', RAIN_PARTIAL: 'Mưa ướt 1 phần', RAIN_FULL: 'Mưa ướt toàn thân', CARRY: 'Bưng đồ', INJURY: 'Tai nạn nhỏ', ATTENDANCE: 'Chuyên cần' };
+const CODE_NAME = { TIP: 'Tip', BASE: 'Lương giờ', NIGHT: 'Ca 22h30–24h', MEAL: 'Tiền ăn', FUEL: 'Tiền xăng', FIXED_DAILY: 'Cộng cố định', RAIN_PARTIAL: 'Mưa ướt 1 phần', RAIN_FULL: 'Mưa ướt toàn thân', CARRY: 'Bưng đồ', INJURY: 'Tai nạn nhỏ', ATTENDANCE: 'Chuyên cần' };
 const STATUS = { draft: ['Chưa có dữ liệu', ''], synced: ['Đã đồng bộ', 'warn'], calculated: ['Đã tính, chưa xác nhận', 'warn'], locked: ['Đã xác nhận', 'lock'], paid: ['Đã trả', 'lock'] };
 
 let toastTimer;
@@ -121,6 +121,8 @@ function drawWeek() {
       <div id="importMsg"></div>
     </div>
 
+    ${w.is_closed ? '' : tipBlock(d, locked)}
+
     ${locked && d.qrs ? qrBlock(d.qrs) : ''}
 
     ${w.is_closed ? '<div class="card empty">Tuần này được đánh dấu quán đóng cửa: không tính lương và không đếm vào chu kỳ chuyên cần.</div>' : `
@@ -182,30 +184,40 @@ function resultBlock(run, locked) {
   const items = run.items.filter((i) => i.totalAmount > 0 || issues.some((x) => x.employeeId === i.employeeId));
   const by = (it) => it.lines.reduce((o, l) => ((o[l.code] = (o[l.code] || 0) + l.amount), o), {});
   const other = (b) => (b.RAIN_PARTIAL || 0) + (b.RAIN_FULL || 0) + (b.CARRY || 0) + (b.INJURY || 0);
-  const tot = { BASE: 0, NIGHT: 0, MEAL: 0, FUEL: 0, FIXED_DAILY: 0, OTHER: 0, ATTENDANCE: 0, total: 0, hours: 0 };
+  const tot = { BASE: 0, NIGHT: 0, MEAL: 0, FUEL: 0, FIXED_DAILY: 0, OTHER: 0, TIP: 0, ATTENDANCE: 0, total: 0, hours: 0 };
   const body = items.map((it) => {
     const b = by(it);
-    tot.BASE += b.BASE || 0; tot.NIGHT += b.NIGHT || 0; tot.MEAL += b.MEAL || 0; tot.FUEL += b.FUEL || 0; tot.FIXED_DAILY += b.FIXED_DAILY || 0; tot.OTHER += other(b); tot.ATTENDANCE += b.ATTENDANCE || 0; tot.total += it.totalAmount; tot.hours += it.workedMinutes / 60;
+    tot.BASE += b.BASE || 0; tot.NIGHT += b.NIGHT || 0; tot.MEAL += b.MEAL || 0; tot.FUEL += b.FUEL || 0; tot.FIXED_DAILY += b.FIXED_DAILY || 0; tot.OTHER += other(b); tot.TIP += b.TIP || 0; tot.ATTENDANCE += b.ATTENDANCE || 0; tot.total += it.totalAmount; tot.hours += it.workedMinutes / 60;
     const open = state.openRows.has(it.employeeId);
     const acc = it.totalAmount > 0 && !it.account ? '<div class="note-warn">Chưa có tài khoản: không có trong danh sách chuyển</div>' : '';
     return `<tr class="clickable ${it.totalAmount ? '' : 'dim'}" data-item="${it.employeeId}">
       <td class="name"><b>${open ? '▾' : '▸'} ${esc(it.name)}</b>${acc}</td>
       <td class="num">${hrs(it.workedMinutes / 60)}</td><td class="num">${money(b.BASE)}</td><td class="num">${money(b.NIGHT)}</td>
       <td class="num">${money(b.MEAL)}</td><td class="num">${money(b.FUEL)}</td><td class="num">${money(b.FIXED_DAILY)}</td>
-      <td class="num">${money(other(b))}</td><td class="num">${money(b.ATTENDANCE)}</td><td class="num"><b>${money(it.totalAmount)}</b></td></tr>
-      ${open ? `<tr class="detail"><td colspan="10"><table class="lines">${it.lines.map((l) => `<tr><td style="width:120px">${CODE_NAME[l.code] || l.code}</td><td>${esc(l.description)}</td><td class="num" style="width:110px">${money(l.amount)}</td></tr>`).join('')}</table></td></tr>` : ''}`;
+      <td class="num">${money(other(b))}</td><td class="num">${money(b.TIP)}</td><td class="num">${money(b.ATTENDANCE)}</td><td class="num"><b>${money(it.totalAmount)}</b></td></tr>
+      ${open ? `<tr class="detail"><td colspan="11"><table class="lines">${it.lines.map((l) => `<tr><td style="width:120px">${CODE_NAME[l.code] || l.code}</td><td>${esc(l.description)}</td><td class="num" style="width:110px">${money(l.amount)}</td></tr>`).join('')}</table></td></tr>` : ''}`;
   }).join('');
   return `
     <div class="head" style="margin-bottom:8px"><h2 style="margin:0">Bảng lương tuần</h2><span class="sub">Tính lúc ${esc(run.run_at)} (UTC). Bấm vào tên để xem từng dòng tiền.</span></div>
     ${issues.length ? `<ul class="issues">${issues.map((i) => `<li class="${i.level}">${esc(i.name)}: ${esc(i.message)}</li>`).join('')}</ul>` : ''}
     <div class="tablewrap">
       <table>
-        <thead><tr><th>Nhân viên</th><th class="num">Giờ</th><th class="num">Lương giờ</th><th class="num">Ca 22h30–24h</th><th class="num">Tiền ăn</th><th class="num">Xăng</th><th class="num">Cộng cố định</th><th class="num">Mưa / bưng / tai nạn</th><th class="num">Chuyên cần</th><th class="num">Tổng nhận</th></tr></thead>
+        <thead><tr><th>Nhân viên</th><th class="num">Giờ</th><th class="num">Lương giờ</th><th class="num">Ca 22h30–24h</th><th class="num">Tiền ăn</th><th class="num">Xăng</th><th class="num">Cộng cố định</th><th class="num">Mưa / bưng / tai nạn</th><th class="num">Tip</th><th class="num">Chuyên cần</th><th class="num">Tổng nhận</th></tr></thead>
         <tbody>${body}
-          <tr class="total"><td>Tổng (${items.filter((i) => i.totalAmount > 0).length} người)</td><td class="num">${hrs(tot.hours)}</td><td class="num">${money(tot.BASE)}</td><td class="num">${money(tot.NIGHT)}</td><td class="num">${money(tot.MEAL)}</td><td class="num">${money(tot.FUEL)}</td><td class="num">${money(tot.FIXED_DAILY)}</td><td class="num">${money(tot.OTHER)}</td><td class="num">${money(tot.ATTENDANCE)}</td><td class="num">${money(tot.total)}</td></tr>
+          <tr class="total"><td>Tổng (${items.filter((i) => i.totalAmount > 0).length} người)</td><td class="num">${hrs(tot.hours)}</td><td class="num">${money(tot.BASE)}</td><td class="num">${money(tot.NIGHT)}</td><td class="num">${money(tot.MEAL)}</td><td class="num">${money(tot.FUEL)}</td><td class="num">${money(tot.FIXED_DAILY)}</td><td class="num">${money(tot.OTHER)}</td><td class="num">${money(tot.TIP)}</td><td class="num">${money(tot.ATTENDANCE)}</td><td class="num">${money(tot.total)}</td></tr>
         </tbody>
       </table>
     </div>`;
+}
+
+function tipBlock(d, locked) {
+  const unitLabel = d.tipUnit === 1000 ? 'nghìn đồng' : d.tipUnit === 1 ? 'đồng' : `× ${money(d.tipUnit)}đ`;
+  return `<div class="card"><div class="head" style="margin-bottom:8px"><h2 style="margin:0">Tiền tip</h2>
+    <span class="sub">Đọc từ ô ${esc(d.tipCells)} trên sheet (đơn vị ${unitLabel}), chia đều cho người đi làm trong ngày, làm tròn: 38,5 → 39.</span></div>
+    <div class="tips">${d.tips.map((t) => `<div class="tip">
+      <label class="f"><span>${t.label} ${dm(t.date)}${t.source === 'manual' ? ' <span class="m">sửa tay</span>' : ''}</span>
+        <input type="number" step="0.5" min="0" data-tip="${t.code}" value="${t.amount ? t.value : ''}" placeholder="0" ${locked ? 'disabled' : ''}></label>
+      <div class="hint">${t.amount ? `${money(t.amount)} ₫ ÷ ${t.workers} người = <b>${money(t.share)} ₫</b>/người` : 'Không có tip'}</div></div>`).join('')}</div></div>`;
 }
 
 function qrBlock(q) {
@@ -291,6 +303,9 @@ function bindWeek(locked) {
       <div class="dlg-foot"><button class="btn" value="no">Thôi</button><button class="btn primary" value="yes">Mở khoá</button></div></form>`);
     if (ok === 'yes') busy(main, async () => { await call('unlock', state.friday); await renderWeek(); });
   };
+  main.querySelectorAll('input[data-tip]').forEach((inp) => {
+    inp.onchange = () => busy(main, async () => { weekData = await call('setTip', state.friday, inp.dataset.tip, inp.value); drawWeek(); });
+  });
   main.querySelectorAll('[data-paid]').forEach((b) => {
     b.onclick = () => busy(null, async () => { weekData.qrs = await call('markPaid', state.friday, Number(b.dataset.paid), b.dataset.v === '1'); await renderWeek(); });
   });
@@ -311,6 +326,7 @@ function bindWeek(locked) {
 function showImport(r) {
   const box = $('#importMsg');
   const msgs = [`<li class="info">Đã đọc ${r.imported} nhân viên từ sheet.</li>`];
+  for (const t of r.tipWarnings || []) msgs.push(`<li class="warning">Tip: ${esc(t)}</li>`);
   if (r.unknown.length) msgs.push(`<li class="warning">Tên chưa có trong danh sách nhân viên, chưa được tính: <b>${r.unknown.map(esc).join(', ')}</b>.
     <button class="btn" id="addUnknown" style="margin-left:8px">Thêm các tên này</button></li>`);
   box.innerHTML = `<ul class="issues" style="margin:10px 0 0">${msgs.join('')}</ul>`;
@@ -501,6 +517,14 @@ async function renderSettings() {
       <label class="check"><input type="radio" name="sheet_mode" value="service_account" ${s.sheet_mode === 'service_account' ? 'checked' : ''}> Service account Google (sheet để riêng tư)</label>
       <div class="row" style="margin-top:6px"><input class="grow" name="service_account_path" value="${esc(s.service_account_path)}" placeholder="File JSON của service account" readonly><button type="button" class="btn" id="pickSa">Chọn file…</button></div>
       <p class="hint">Với service account: chia sẻ sheet cho email trong file JSON (client_email) quyền Người xem.</p>
+      <h2 style="margin-top:16px">Tiền tip trên sheet</h2>
+      <div class="row">
+        <label class="f grow"><span>Ô tổng tip T6, T7, CN</span><input name="tip_cells" value="${esc(s.tip_cells || 'K15,L15,M15')}"></label>
+        <label class="f"><span>1 trên sheet bằng</span><select name="tip_unit">
+          <option value="1000" ${String(s.tip_unit) !== '1' ? 'selected' : ''}>1.000đ (nghìn đồng)</option>
+          <option value="1" ${String(s.tip_unit) === '1' ? 'selected' : ''}>1đ (ghi đủ số)</option></select></label>
+      </div>
+      <p class="hint">Vd. ô K15 ghi 500 → 500.000đ tip ngày T6, chia đều cho người đi làm T6.</p>
     </div>
     <div class="card"><h2>Xuất file</h2>
       <label class="f"><span>Thư mục lưu file Excel</span><div class="row"><input class="grow" name="export_folder" value="${esc(s.export_folder)}" readonly><button type="button" class="btn" id="pickFolder">Chọn…</button></div></label>
@@ -543,7 +567,7 @@ async function renderSettings() {
       if (k === 'AL') allowances.push({ code: p, default_amount: Number(i.value) });
       else (rules[k] ||= {})[p] = Number(i.value);
     });
-    await call('saveSettings', { sheet_link: f.sheet_link.value, sheet_mode: f.sheet_mode.value, service_account_path: f.service_account_path.value, export_folder: f.export_folder.value, remark_format: f.remark_format.value, rules, allowances });
+    await call('saveSettings', { sheet_link: f.sheet_link.value, sheet_mode: f.sheet_mode.value, service_account_path: f.service_account_path.value, tip_cells: f.tip_cells.value, tip_unit: f.tip_unit.value, export_folder: f.export_folder.value, remark_format: f.remark_format.value, rules, allowances });
     toast('Đã lưu cài đặt. Các tuần chưa xác nhận cần bấm Tính lại.');
   });
 }

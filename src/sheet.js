@@ -81,7 +81,7 @@ async function fetchWithServiceAccount(link, keyFile, fetchImpl = fetch) {
   const meta = await (await fetchImpl(`https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties`, auth)).json();
   if (meta.error) throw new Error(`Google trả lỗi: ${meta.error.message}. Hãy chia sẻ sheet cho ${email} quyền Người xem.`);
   const sheet = meta.sheets.find((s) => String(s.properties.sheetId) === String(gid)) || meta.sheets[0];
-  const range = encodeURIComponent(`'${sheet.properties.title.replace(/'/g, "''")}'!A1:I300`);
+  const range = encodeURIComponent(`'${sheet.properties.title.replace(/'/g, "''")}'!A1:Z300`);
   const vals = await (await fetchImpl(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${range}?valueRenderOption=FORMATTED_VALUE`, auth)).json();
   if (vals.error) throw new Error('Google trả lỗi: ' + vals.error.message);
   return vals.values || [];
@@ -108,11 +108,46 @@ async function readLocalFile(file) {
   const matrix = [];
   ws.eachRow({ includeEmpty: true }, (row, r) => {
     const arr = [];
-    for (let c = 1; c <= 9; c++) arr.push(cellValue(row.getCell(c).value));
+    for (let c = 1; c <= 26; c++) arr.push(cellValue(row.getCell(c).value));
     matrix[r - 1] = arr;
   });
   for (let i = 0; i < matrix.length; i++) if (!matrix[i]) matrix[i] = [];
   return matrix;
 }
 
-module.exports = { parseLink, matrixToEntries, fetchPublicCsv, fetchWithServiceAccount, readLocalFile, DAY_COLUMNS };
+/** 'K15' → { row: 14, col: 10 } (đếm từ 0). */
+function cellRef(ref) {
+  const m = String(ref || '').trim().toUpperCase().match(/^([A-Z]{1,2})(\d+)$/);
+  if (!m) return null;
+  let col = 0;
+  for (const ch of m[1]) col = col * 26 + (ch.charCodeAt(0) - 64);
+  return { row: Number(m[2]) - 1, col: col - 1 };
+}
+
+/** Đọc số trên sheet: 500 · 38,5 · 38.5 · 1.500 (nghìn) · 1,500. Ô trống = 0. */
+function parseNumber(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') return v;
+  let s = String(v).replace(/[\s₫đk]/gi, '');
+  if (!s) return 0;
+  if (/^\d{1,3}([.,]\d{3})+$/.test(s)) s = s.replace(/[.,]/g, '');
+  else s = s.replace(',', '.');
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+/** Tổng tip T6, T7, CN từ các ô cấu hình. */
+function readTips(matrix, cellsSetting) {
+  const refs = String(cellsSetting || '').split(/[,;\s]+/).filter(Boolean);
+  const codes = ['FRI', 'SAT', 'SUN'];
+  const out = {};
+  codes.forEach((code, i) => {
+    const r = cellRef(refs[i]);
+    if (!r) return;
+    const raw = (matrix[r.row] || [])[r.col];
+    out[code] = { raw: raw === undefined || raw === null ? '' : String(raw), value: parseNumber(raw), ref: refs[i].toUpperCase() };
+  });
+  return out;
+}
+
+module.exports = { readTips, parseNumber, cellRef, parseLink, matrixToEntries, fetchPublicCsv, fetchWithServiceAccount, readLocalFile, DAY_COLUMNS };
