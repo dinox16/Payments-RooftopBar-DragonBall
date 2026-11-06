@@ -1,3 +1,5 @@
+# Giới Thiệu
+Ứng dụng được xây dựng nhằm mục tiêu xây dựng được phần mềm quản lý cho một cơ sở kinh doanh quy mô nhỏ lẻ. Được áp dụng thực tế cho cơ sở kinh doanh Rooftopbar DragonBall.
 # Tính lương
 
 Ứng dụng Windows tính lương tuần (T6–CN) từ Google Sheet đăng ký ca, xuất bảng lương và danh sách chuyển khoản theo mẫu ngân hàng.
