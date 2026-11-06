@@ -148,7 +148,11 @@ test('xác nhận: chặn khi thiếu tài khoản, xuất 2 file khi đủ', as
   for (const e of svc.listEmployees()) svc.saveEmployee({ ...e, hourly_rate: 25000 });
   svc.importMatrix(FRI, SHEET, 'test', null);
   svc.calculate(FRI);
-  await assert.rejects(svc.confirm(FRI), /chưa có tài khoản/);
+  // Chưa ai có tài khoản: vẫn xác nhận được, danh sách chuyển khoản trống, mọi người nằm trong mục trả riêng
+  const pre = svc.preflight(FRI);
+  assert.equal(pre.errors.length, 0);
+  assert.equal(pre.skipped.length, 12);
+  assert.equal(pre.transferCount, 0);
   const tmpl = path.join(dir, 'tk.xlsx');
   await svc.exportAccountTemplate(tmpl);
   // điền tài khoản bằng ExcelJS như người dùng
@@ -205,4 +209,33 @@ test('lần đầu dùng: thêm nhân viên từ tên trên sheet', async () => 
   const r2 = svc.addEmployeesAndReimport(FRI, r.unknown);
   assert.equal(r2.unknown.length, 0);
   assert.equal(r2.week.rows.find((x) => x.name === 'Giang').hours, 21.5);
+});
+
+test('người chưa có tài khoản hoặc nhận 0đ không có trong danh sách chuyển', async () => {
+  const { svc } = await freshService();
+  const emps = svc.listEmployees();
+  for (const e of emps) {
+    const acc = ['Giang', 'Hải'].includes(e.sheet_name) ? null : { account_holder: 'NV ' + e.sheet_name, account_number: '0' + (900000000 + e.id), bank_name: 'NHTMCP Quân Đội' };
+    svc.saveEmployee({ ...e, hourly_rate: 25000, account: acc });
+  }
+  svc.importMatrix(FRI, SHEET, 'test', null);
+  svc.calculate(FRI);
+  const pre = svc.preflight(FRI);
+  assert.deepEqual(pre.skipped.map((x) => x.name), ['Giang']); // Hải không đi làm → 0đ, không tính
+  const out = await svc.confirm(FRI);
+  const ExcelJS = require('exceljs');
+  const wb = new ExcelJS.Workbook(); await wb.xlsx.readFile(out.transferFile);
+  const names = []; wb.getWorksheet('Sheet1').eachRow((r, i) => { if (i > 1 && r.getCell(2).value) names.push(r.getCell(2).value); });
+  assert.equal(names.length, 11);
+  assert.ok(!names.includes('NV Giang') && !names.includes('NV Hải'));
+  assert.ok(names.every((n) => n.startsWith('NV ')));
+  const q = await svc.transferQrs(FRI);
+  assert.equal(q.items.length, 11);
+  assert.deepEqual(q.cash.map((x) => x.name), ['Giang']);
+  await svc.markPaid(FRI, null, true);
+  assert.equal(svc.getWeek(FRI).week.status, 'paid');
+  // file bảng lương vẫn có Giang
+  const wp = new ExcelJS.Workbook(); await wp.xlsx.readFile(out.payrollFile);
+  const pn = []; wp.getWorksheet('Tổng hợp').eachRow((r, i) => { if (i > 3) pn.push(r.getCell(2).value); });
+  assert.ok(pn.includes('Giang'));
 });

@@ -392,17 +392,22 @@ class PayrollService {
     };
   }
 
-  /** Kiểm tra trước khi xác nhận: lỗi chặn xuất file. */
+  /**
+   * Kiểm tra trước khi xác nhận. errors chặn xuất file.
+   * skipped = người có lương nhưng chưa có tài khoản: vẫn có trong bảng lương, không có trong danh sách chuyển khoản.
+   */
   preflight(friday) {
     const data = this.getWeek(friday);
     if (!data.run || data.run.status !== 'draft') throw new Error('Hãy bấm "Tính lương" trước khi xác nhận.');
     const errors = data.run.issues.filter((i) => i.level === 'error').map((i) => `${i.name}: ${i.message}`);
+    const skipped = [];
     for (const it of data.run.items) {
       if (it.totalAmount <= 0) continue;
-      if (!it.account) errors.push(`${it.name}: chưa có tài khoản ngân hàng`);
+      if (!it.account) skipped.push({ employeeId: it.employeeId, name: it.name, amount: it.totalAmount });
       if (String(it.totalAmount).length > 12) errors.push(`${it.name}: số tiền quá 12 chữ số`);
     }
-    return { data, errors };
+    const transferCount = data.run.items.filter((i) => i.totalAmount > 0 && i.account).length;
+    return { data, errors, skipped, transferCount };
   }
 
   async confirm(friday) {
@@ -415,7 +420,8 @@ class PayrollService {
     const run = data.run;
     const result = { items: run.items, shiftRows: this.shiftRowsForExport(w), qrs: await this.buildQrs(run, w, s.remark_format, 'buffer') };
     const payrollFile = await X.writePayrollFile(folder, w, result);
-    const transferRows = run.items.filter((i) => i.totalAmount > 0).map((i) => ({ holder: i.account.account_holder, accountNumber: i.account.account_number, bankName: i.account.bank_name, bankCode: i.account.bank_code, amount: i.totalAmount }));
+    // Chỉ người có tài khoản và nhận > 0 mới vào danh sách chuyển khoản
+    const transferRows = run.items.filter((i) => i.totalAmount > 0 && i.account).map((i) => ({ holder: i.account.account_holder, accountNumber: i.account.account_number, bankName: i.account.bank_name, bankCode: i.account.bank_code, amount: i.totalAmount }));
     let transferFile;
     try {
       transferFile = await X.writeTransferFile(folder, w, transferRows, this.templatePath, s.remark_format);
@@ -437,7 +443,7 @@ class PayrollService {
   async buildQrs(run, w, remarkFormat, format = 'dataUrl') {
     const remark = X.remarkFor(remarkFormat, w);
     const out = [];
-    for (const it of run.items.filter((i) => i.totalAmount > 0)) {
+    for (const it of run.items.filter((i) => i.totalAmount > 0 && i.account)) {
       const a = it.account;
       const row = { employeeId: it.employeeId, name: it.name, amount: it.totalAmount, remark, paidAt: it.paidAt || null, holder: a?.account_holder, accountNumber: a?.account_number, bankName: a?.bank_name, qr: null, error: null };
       try {
@@ -456,7 +462,10 @@ class PayrollService {
     const data = this.getWeek(friday);
     if (!data.run || data.run.status !== 'final') return null;
     const items = await this.buildQrs(data.run, data.week, this.db.getSettings().remark_format, 'dataUrl');
-    return { items, paid: items.filter((i) => i.paidAt).length, total: items.length };
+    // Người chưa có tài khoản: trả riêng (tiền mặt…), vẫn đánh dấu đã trả được
+    const cash = data.run.items.filter((i) => i.totalAmount > 0 && !i.account).map((i) => ({ employeeId: i.employeeId, name: i.name, amount: i.totalAmount, paidAt: i.paidAt || null }));
+    const all = [...items, ...cash];
+    return { items, cash, paid: all.filter((i) => i.paidAt).length, total: all.length };
   }
 
   markPaid(friday, employeeId, paid) {

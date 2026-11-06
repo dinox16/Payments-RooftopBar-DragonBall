@@ -172,3 +172,4 @@ legend { font-size: 12.5px; font-weight: 600; padding: 0 4px; }
 /* Thanh cập nhật */
 .updatebar { position: fixed; top: 14px; right: 24px; z-index: 30; display: flex; gap: 10px; align-items: center; background: #fff; border: 1px solid #b9e0cf; box-shadow: 0 8px 30px rgba(0,0,0,.15); border-radius: 8px; padding: 10px 14px; font-size: 13.5px; }
 .updatebar[hidden], .toast[hidden] { display: none; }
+.note-warn { color: var(--warn); font-size: 12.5px; }

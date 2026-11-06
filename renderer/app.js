@@ -187,7 +187,7 @@ function resultBlock(run, locked) {
     const b = by(it);
     tot.BASE += b.BASE || 0; tot.NIGHT += b.NIGHT || 0; tot.MEAL += b.MEAL || 0; tot.FUEL += b.FUEL || 0; tot.FIXED_DAILY += b.FIXED_DAILY || 0; tot.OTHER += other(b); tot.ATTENDANCE += b.ATTENDANCE || 0; tot.total += it.totalAmount; tot.hours += it.workedMinutes / 60;
     const open = state.openRows.has(it.employeeId);
-    const acc = it.totalAmount > 0 && !it.account ? '<div class="missing">Chưa có tài khoản ngân hàng</div>' : '';
+    const acc = it.totalAmount > 0 && !it.account ? '<div class="note-warn">Chưa có tài khoản: không có trong danh sách chuyển</div>' : '';
     return `<tr class="clickable ${it.totalAmount ? '' : 'dim'}" data-item="${it.employeeId}">
       <td class="name"><b>${open ? '▾' : '▸'} ${esc(it.name)}</b>${acc}</td>
       <td class="num">${hrs(it.workedMinutes / 60)}</td><td class="num">${money(b.BASE)}</td><td class="num">${money(b.NIGHT)}</td>
@@ -217,7 +217,8 @@ function qrBlock(q) {
       ${x.qr ? `<img src="${x.qr}" alt="QR ${esc(x.name)}" data-zoom="${x.employeeId}">` : `<div class="qrerr">${esc(x.error)}</div>`}
       <div class="qrinfo"><b>${esc(x.name)}</b><span class="amt">${money(x.amount)} ₫</span>
         <small>${esc(x.holder || '')}</small><small class="mono">${esc(x.accountNumber || '')}</small><small>${esc(x.bankName || '')}</small>
-        <button class="btn ${x.paidAt ? '' : 'primary'}" data-paid="${x.employeeId}" data-v="${x.paidAt ? 0 : 1}">${x.paidAt ? '✓ Đã chuyển' : 'Đánh dấu đã chuyển'}</button></div></div>`).join('')}</div>`;
+        <button class="btn ${x.paidAt ? '' : 'primary'}" data-paid="${x.employeeId}" data-v="${x.paidAt ? 0 : 1}">${x.paidAt ? '✓ Đã chuyển' : 'Đánh dấu đã chuyển'}</button></div></div>`).join('')}</div>
+    ${q.cash && q.cash.length ? `<div class="card"><h2>Trả riêng (chưa có tài khoản ngân hàng)</h2><table><tbody>${q.cash.map((x) => `<tr class="${x.paidAt ? 'dim' : ''}"><td><b>${esc(x.name)}</b></td><td class="num">${money(x.amount)} ₫</td><td style="width:170px"><button class="btn ${x.paidAt ? '' : 'primary'}" data-paid="${x.employeeId}" data-v="${x.paidAt ? 0 : 1}">${x.paidAt ? '✓ Đã trả' : 'Đánh dấu đã trả'}</button></td></tr>`).join('')}</tbody></table></div>` : ''}`;
 }
 
 function actionBar(d, locked) {
@@ -228,7 +229,7 @@ function actionBar(d, locked) {
       <div class="files">${d.exports.map((x) => `<span class="file" data-open="${esc(x.file_path)}"><span class="x">X</span>${esc(x.file_name)}</span>`).join('')}</div>
       ${d.exports[0] ? `<button class="btn" data-folder="${esc(d.exports[0].file_path)}">Mở thư mục</button>` : ''}
       <div class="spacer"></div>
-      <span class="sum">Tổng chuyển khoản<b>${money(run && run.total_amount)} ₫</b></span>
+      <span class="sum">Chuyển khoản<b>${money(d.qrs ? d.qrs.items.reduce((a, x) => a + x.amount, 0) : run && run.total_amount)} ₫</b>${d.qrs && d.qrs.cash.length ? ` · trả riêng ${money(d.qrs.cash.reduce((a, x) => a + x.amount, 0))} ₫` : ''}</span>
       <button class="btn" id="unlock">Mở khoá để tính lại</button></div>`;
   }
   const hasData = d.rows.some((r) => Object.values(r.cells).some((c) => c.status !== 'none'));
@@ -349,12 +350,14 @@ async function confirmPayroll() {
     return;
   }
   const run = pre.data.run;
-  const n = run.items.filter((i) => i.totalAmount > 0).length;
+  const n = pre.transferCount;
+  const skipTotal = pre.skipped.reduce((a, x) => a + x.amount, 0);
   const ok = await openDialog(`<form method="dialog"><div class="dlg-head"><h2>Xác nhận lương tuần ${dm(pre.data.week.week_start)} – ${dmy(pre.data.week.week_end)}</h2></div>
     <div class="dlg-body"><div class="full">
-      <p style="margin-top:0">${n} người · tổng <b>${money(run.total_amount)} ₫</b>. App sẽ khoá tuần này và xuất 2 file:</p>
+      <p style="margin-top:0">Chuyển khoản cho <b>${n} người</b> · <b>${money(run.total_amount - skipTotal)} ₫</b>. App sẽ khoá tuần này và xuất 2 file:</p>
       <ul><li>BangLuong_${pre.data.week.week_start.split('-').reverse().join('-')}_${pre.data.week.week_end.split('-').reverse().join('-')}.xlsx</li>
       <li>DanhSachThanhToan_${pre.data.week.week_start.split('-').reverse().join('-')}_${pre.data.week.week_end.split('-').reverse().join('-')}.xlsx</li></ul>
+      ${pre.skipped.length ? `<ul class="issues"><li class="warning">Không có trong danh sách chuyển vì chưa có tài khoản ngân hàng, cần trả riêng: ${pre.skipped.map((x) => `<b>${esc(x.name)}</b> ${money(x.amount)} ₫`).join(', ')}.</li></ul>` : ''}
     </div></div>
     <div class="dlg-foot"><button class="btn" value="no">Huỷ</button><button class="btn primary" value="yes">Xác nhận & xuất</button></div></form>`);
   if (ok !== 'yes') return;
