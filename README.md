@@ -6,7 +6,7 @@
 
 ## Cài và dùng lần đầu
 
-1. Tải `TinhLuong-Setup-x.y.z.exe` mới nhất ở mục Releases của repo và chạy. Windows có thể hiện "Windows protected your PC" vì bộ cài chưa ký số: bấm **More info → Run anyway**.
+1. Tải `TinhLuong-Setup.exe` mới nhất ở mục Releases của repo và chạy. Windows có thể hiện "Windows protected your PC" vì bộ cài chưa ký số: bấm **More info → Run anyway**.
 2. Trang **Nhân viên**: nhập đơn giá giờ, ngày bắt đầu đi làm (cho chuyên cần), tài khoản ngân hàng.
    Có thể bấm **Xuất file mẫu tài khoản**, điền 4 cột rồi **Nhập tài khoản từ Excel**.
 3. Google Sheet: bật chia sẻ **Bất kỳ ai có đường liên kết – Người xem** (hoặc dùng Service account trong Cài đặt).
@@ -17,10 +17,6 @@
 File xuất nằm ở `Documents\TinhLuong\<năm>\`:
 - `BangLuong_06-11-2026_08-11-2026.xlsx` (Tổng hợp, Chi tiết, Ca làm)
 - `DanhSachThanhToan_06-11-2026_08-11-2026.xlsx` (đúng mẫu ngân hàng)
-
-Dữ liệu: `%APPDATA%\Tinh Luong\payroll.db`, tự sao lưu mỗi ngày vào thư mục `backups` (giữ 30 bản).
-Gỡ cài đặt không xoá dữ liệu này.
-
 ## Quy tắc đang áp dụng
 
 | Khoản | Quy tắc |
