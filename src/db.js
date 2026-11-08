@@ -153,6 +153,16 @@ CREATE TABLE IF NOT EXISTS week_tips (
   UNIQUE (work_week_id, day_code)
 );
 
+CREATE TABLE IF NOT EXISTS deductions (
+  id           INTEGER PRIMARY KEY,
+  work_week_id INTEGER NOT NULL REFERENCES work_weeks(id) ON DELETE CASCADE,
+  employee_id  INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  work_date    TEXT,                          -- NULL = phạt cả tuần
+  amount       INTEGER NOT NULL CHECK (amount > 0),
+  reason       TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS banks (
   id    INTEGER PRIMARY KEY,
   name  TEXT NOT NULL UNIQUE,
@@ -185,7 +195,7 @@ const DEFAULT_ALLOWANCES = [
   ['RAIN_PARTIAL', 'Mưa ướt quần hoặc áo', 20000, 'RAIN', 1, 1],
   ['RAIN_FULL', 'Mưa ướt toàn thân', 50000, 'RAIN', 1, 2],
   ['CARRY', 'Bưng ghế, bàn, đá', 20000, null, null, 3],
-  ['INJURY', 'Tai nạn nhỏ (cắt dao, bỏng nhẹ)', 20000, null, null, 4],
+  ['INJURY', 'Sự cố (cắt dao, bỏng nhẹ)', 20000, null, null, 4],
 ];
 
 const DEFAULT_RULES = [
@@ -234,6 +244,8 @@ class Database {
     // Bản 1.1: mã BIN cho VietQR và đánh dấu đã chuyển tiền
     this.addColumn('banks', 'bin', 'TEXT');
     this.addColumn('payroll_items', 'paid_at', 'TEXT');
+    // Bản 1.3: "Tai nạn nhỏ" đổi tên thành "Sự cố"
+    this.raw.run("UPDATE allowance_types SET name='Sự cố (cắt dao, bỏng nhẹ)' WHERE code='INJURY' AND name LIKE 'Tai n%'");
     // Bản 1.2: cài đặt tip cho database cũ
     this.raw.run("INSERT OR IGNORE INTO app_settings(key,value) VALUES ('tip_cells','K15,L15,M15')");
     this.raw.run("INSERT OR IGNORE INTO app_settings(key,value) VALUES ('tip_unit','1000')");

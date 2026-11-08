@@ -14,7 +14,7 @@ const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDa
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const fridayOf = (iso) => { const dow = new Date(iso + 'T00:00:00Z').getUTCDay(); return addDays(iso, -((dow - 5 + 7) % 7)); };
 
-const CODE_NAME = { TIP: 'Tip', BASE: 'Lương giờ', NIGHT: 'Ca 22h30–24h', MEAL: 'Tiền ăn', FUEL: 'Tiền xăng', FIXED_DAILY: 'Cộng cố định', RAIN_PARTIAL: 'Mưa ướt 1 phần', RAIN_FULL: 'Mưa ướt toàn thân', CARRY: 'Bưng đồ', INJURY: 'Tai nạn nhỏ', ATTENDANCE: 'Chuyên cần' };
+const CODE_NAME = { TIP: 'Tip', BASE: 'Lương giờ', NIGHT: 'Ca 22h30–24h', MEAL: 'Tiền ăn', FUEL: 'Tiền xăng', FIXED_DAILY: 'Cộng cố định', RAIN_PARTIAL: 'Mưa ướt 1 phần', RAIN_FULL: 'Mưa ướt toàn thân', CARRY: 'Bưng đồ', INJURY: 'Sự cố', PENALTY: 'Tiền phạt', ATTENDANCE: 'Chuyên cần' };
 const STATUS = { draft: ['Chưa có dữ liệu', ''], synced: ['Đã đồng bộ', 'warn'], calculated: ['Đã tính, chưa xác nhận', 'warn'], locked: ['Đã xác nhận', 'lock'], paid: ['Đã trả', 'lock'] };
 
 let toastTimer;
@@ -123,12 +123,14 @@ function drawWeek() {
 
     ${w.is_closed ? '' : tipBlock(d, locked)}
 
+    ${w.is_closed ? '' : penaltyBlock(d, locked)}
+
     ${locked && d.qrs ? qrBlock(d.qrs) : ''}
 
     ${w.is_closed ? '<div class="card empty">Tuần này được đánh dấu quán đóng cửa: không tính lương và không đếm vào chu kỳ chuyên cần.</div>' : `
     <div class="head" style="margin-bottom:8px">
       <h2 style="margin:0">Ca làm & phụ cấp trong ca</h2>
-      <span class="sub">Bấm vào giờ để sửa tay. Mưa, bưng đồ, tai nạn ghi theo từng ngày.</span>
+      <span class="sub">Bấm vào giờ để sửa tay. Mưa, bưng đồ, sự cố ghi theo từng ngày.</span>
       <div class="spacer"></div>
       <label class="toggle"><input type="checkbox" id="hideEmpty" ${state.hideEmpty ? 'checked' : ''}> Ẩn người không đi làm</label>
     </div>
@@ -169,7 +171,7 @@ function shiftCell(r, d, locked) {
         <option value="RAIN_FULL" ${rain === 'RAIN_FULL' ? 'selected' : ''}>☂ ướt hết</option>
       </select>
       ${stepper('CARRY', 'Bưng', e.CARRY || 0, locked)}
-      ${stepper('INJURY', 'Tai nạn', e.INJURY || 0, locked)}
+      ${stepper('INJURY', 'Sự cố', e.INJURY || 0, locked)}
     </div>`;
   }
   return `<td class="shift" data-day="${d.code}">${t}${ev}</td>`;
@@ -184,27 +186,27 @@ function resultBlock(run, locked) {
   const items = run.items.filter((i) => i.totalAmount > 0 || issues.some((x) => x.employeeId === i.employeeId));
   const by = (it) => it.lines.reduce((o, l) => ((o[l.code] = (o[l.code] || 0) + l.amount), o), {});
   const other = (b) => (b.RAIN_PARTIAL || 0) + (b.RAIN_FULL || 0) + (b.CARRY || 0) + (b.INJURY || 0);
-  const tot = { BASE: 0, NIGHT: 0, MEAL: 0, FUEL: 0, FIXED_DAILY: 0, OTHER: 0, TIP: 0, ATTENDANCE: 0, total: 0, hours: 0 };
+  const tot = { BASE: 0, NIGHT: 0, MEAL: 0, FUEL: 0, FIXED_DAILY: 0, OTHER: 0, TIP: 0, ATTENDANCE: 0, PENALTY: 0, total: 0, hours: 0 };
   const body = items.map((it) => {
     const b = by(it);
-    tot.BASE += b.BASE || 0; tot.NIGHT += b.NIGHT || 0; tot.MEAL += b.MEAL || 0; tot.FUEL += b.FUEL || 0; tot.FIXED_DAILY += b.FIXED_DAILY || 0; tot.OTHER += other(b); tot.TIP += b.TIP || 0; tot.ATTENDANCE += b.ATTENDANCE || 0; tot.total += it.totalAmount; tot.hours += it.workedMinutes / 60;
+    tot.BASE += b.BASE || 0; tot.NIGHT += b.NIGHT || 0; tot.MEAL += b.MEAL || 0; tot.FUEL += b.FUEL || 0; tot.FIXED_DAILY += b.FIXED_DAILY || 0; tot.OTHER += other(b); tot.TIP += b.TIP || 0; tot.PENALTY += b.PENALTY || 0; tot.ATTENDANCE += b.ATTENDANCE || 0; tot.total += it.totalAmount; tot.hours += it.workedMinutes / 60;
     const open = state.openRows.has(it.employeeId);
     const acc = it.totalAmount > 0 && !it.account ? '<div class="note-warn">Chưa có tài khoản: không có trong danh sách chuyển</div>' : '';
     return `<tr class="clickable ${it.totalAmount ? '' : 'dim'}" data-item="${it.employeeId}">
       <td class="name"><b>${open ? '▾' : '▸'} ${esc(it.name)}</b>${acc}</td>
       <td class="num">${hrs(it.workedMinutes / 60)}</td><td class="num">${money(b.BASE)}</td><td class="num">${money(b.NIGHT)}</td>
       <td class="num">${money(b.MEAL)}</td><td class="num">${money(b.FUEL)}</td><td class="num">${money(b.FIXED_DAILY)}</td>
-      <td class="num">${money(other(b))}</td><td class="num">${money(b.TIP)}</td><td class="num">${money(b.ATTENDANCE)}</td><td class="num"><b>${money(it.totalAmount)}</b></td></tr>
-      ${open ? `<tr class="detail"><td colspan="11"><table class="lines">${it.lines.map((l) => `<tr><td style="width:120px">${CODE_NAME[l.code] || l.code}</td><td>${esc(l.description)}</td><td class="num" style="width:110px">${money(l.amount)}</td></tr>`).join('')}</table></td></tr>` : ''}`;
+      <td class="num">${money(other(b))}</td><td class="num">${money(b.TIP)}</td><td class="num">${money(b.ATTENDANCE)}</td><td class="num ${b.PENALTY ? 'neg' : ''}">${b.PENALTY ? '−' + money(-b.PENALTY) : '0'}</td><td class="num"><b>${money(it.totalAmount)}</b></td></tr>
+      ${open ? `<tr class="detail"><td colspan="12"><table class="lines">${it.lines.map((l) => `<tr><td style="width:120px">${CODE_NAME[l.code] || l.code}</td><td>${esc(l.description)}</td><td class="num ${l.amount < 0 ? 'neg' : ''}" style="width:110px">${l.amount < 0 ? '−' + money(-l.amount) : money(l.amount)}</td></tr>`).join('')}</table></td></tr>` : ''}`;
   }).join('');
   return `
     <div class="head" style="margin-bottom:8px"><h2 style="margin:0">Bảng lương tuần</h2><span class="sub">Tính lúc ${esc(run.run_at)} (UTC). Bấm vào tên để xem từng dòng tiền.</span></div>
     ${issues.length ? `<ul class="issues">${issues.map((i) => `<li class="${i.level}">${esc(i.name)}: ${esc(i.message)}</li>`).join('')}</ul>` : ''}
     <div class="tablewrap">
       <table>
-        <thead><tr><th>Nhân viên</th><th class="num">Giờ</th><th class="num">Lương giờ</th><th class="num">Ca 22h30–24h</th><th class="num">Tiền ăn</th><th class="num">Xăng</th><th class="num">Cộng cố định</th><th class="num">Mưa / bưng / tai nạn</th><th class="num">Tip</th><th class="num">Chuyên cần</th><th class="num">Tổng nhận</th></tr></thead>
+        <thead><tr><th>Nhân viên</th><th class="num">Giờ</th><th class="num">Lương giờ</th><th class="num">Ca 22h30–24h</th><th class="num">Tiền ăn</th><th class="num">Xăng</th><th class="num">Cộng cố định</th><th class="num">Mưa / bưng / sự cố</th><th class="num">Tip</th><th class="num">Chuyên cần</th><th class="num">Phạt</th><th class="num">Tổng nhận</th></tr></thead>
         <tbody>${body}
-          <tr class="total"><td>Tổng (${items.filter((i) => i.totalAmount > 0).length} người)</td><td class="num">${hrs(tot.hours)}</td><td class="num">${money(tot.BASE)}</td><td class="num">${money(tot.NIGHT)}</td><td class="num">${money(tot.MEAL)}</td><td class="num">${money(tot.FUEL)}</td><td class="num">${money(tot.FIXED_DAILY)}</td><td class="num">${money(tot.OTHER)}</td><td class="num">${money(tot.TIP)}</td><td class="num">${money(tot.ATTENDANCE)}</td><td class="num">${money(tot.total)}</td></tr>
+          <tr class="total"><td>Tổng (${items.filter((i) => i.totalAmount > 0).length} người)</td><td class="num">${hrs(tot.hours)}</td><td class="num">${money(tot.BASE)}</td><td class="num">${money(tot.NIGHT)}</td><td class="num">${money(tot.MEAL)}</td><td class="num">${money(tot.FUEL)}</td><td class="num">${money(tot.FIXED_DAILY)}</td><td class="num">${money(tot.OTHER)}</td><td class="num">${money(tot.TIP)}</td><td class="num">${money(tot.ATTENDANCE)}</td><td class="num ${tot.PENALTY ? 'neg' : ''}">${tot.PENALTY ? '−' + money(-tot.PENALTY) : '0'}</td><td class="num">${money(tot.total)}</td></tr>
         </tbody>
       </table>
     </div>`;
@@ -218,6 +220,47 @@ function tipBlock(d, locked) {
       <label class="f"><span>${t.label} ${dm(t.date)}${t.source === 'manual' ? ' <span class="m">sửa tay</span>' : ''}</span>
         <input type="number" step="0.5" min="0" data-tip="${t.code}" value="${t.amount ? t.value : ''}" placeholder="0" ${locked ? 'disabled' : ''}></label>
       <div class="hint">${t.amount ? `${money(t.amount)} ₫ ÷ ${t.workers} người = <b>${money(t.share)} ₫</b>/người` : 'Không có tip'}</div></div>`).join('')}</div></div>`;
+}
+
+function penaltyBlock(d, locked) {
+  const list = d.deductions || [];
+  const dayLabel = (x) => (x.day_code ? `${d.days.find((dd) => dd.code === x.day_code).label} ${dm(x.work_date)}` : 'Cả tuần');
+  const total = list.reduce((a, x) => a + x.amount, 0);
+  return `<div class="card"><div class="head" style="margin-bottom:${list.length ? 8 : 0}px"><h2 style="margin:0">Tiền phạt</h2>
+    <span class="sub">${list.length ? `${list.length} khoản · trừ ${money(total)} ₫ vào tổng nhận` : 'Chưa có khoản phạt nào trong tuần này.'}</span>
+    <div class="spacer"></div>${locked ? '' : '<button class="btn" id="addPenalty">+ Thêm tiền phạt</button>'}</div>
+    ${list.length ? `<table><thead><tr><th>Nhân viên</th><th>Ngày</th><th>Lý do</th><th class="num">Số tiền</th><th style="width:130px"></th></tr></thead><tbody>
+      ${list.map((x) => `<tr><td><b>${esc(x.sheet_name)}</b></td><td>${dayLabel(x)}</td><td>${esc(x.reason)}</td><td class="num neg">−${money(x.amount)}</td>
+        <td>${locked ? '' : `<button class="btn ghost" data-pen-edit="${x.id}">Sửa</button><button class="btn ghost danger" data-pen-del="${x.id}">Xoá</button>`}</td></tr>`).join('')}
+    </tbody></table>` : ''}</div>`;
+}
+
+async function editPenalty(x) {
+  const d = weekData;
+  x = x || { employee_id: '', day_code: '', amount: '', reason: '' };
+  const emps = d.rows.slice().sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  const res = await openDialog(`<form method="dialog">
+    <div class="dlg-head"><h2>${x.id ? 'Sửa tiền phạt' : 'Thêm tiền phạt'}</h2><div class="sub">Số tiền được trừ vào tổng nhận của tuần này.</div></div>
+    <div class="dlg-body">
+      <label class="f"><span>Nhân viên</span><select name="emp" required><option value="">— chọn —</option>
+        ${emps.map((r) => `<option value="${r.employeeId}" ${r.employeeId === x.employee_id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
+      <label class="f"><span>Ngày</span><select name="day"><option value="">Cả tuần</option>
+        ${d.days.map((dd) => `<option value="${dd.code}" ${dd.code === x.day_code ? 'selected' : ''}>${dd.label} ${dm(dd.date)}</option>`).join('')}</select></label>
+      <label class="f"><span>Số tiền (₫)</span><input name="amount" type="number" min="1000" step="1000" value="${x.amount || ''}" placeholder="vd. 50000"></label>
+      <label class="f"><span>Lý do</span><input name="reason" maxlength="120" value="${esc(x.reason || '')}" placeholder="vd. đi trễ 30 phút"></label>
+      <div class="full err-text" id="penErr"></div>
+    </div>
+    <div class="dlg-foot"><button class="btn" value="cancel" formnovalidate>Huỷ</button><button class="btn primary" id="savePen">Lưu</button></div></form>`, (dl) => {
+    dl.querySelector('#savePen').onclick = async (ev) => {
+      ev.preventDefault();
+      const f = dl.querySelector('form');
+      try {
+        weekData = await call('saveDeduction', state.friday, { id: x.id, employeeId: Number(f.emp.value), dayCode: f.day.value, amount: Number(f.amount.value), reason: f.reason.value });
+        dl.close('saved');
+      } catch (err) { dl.querySelector('#penErr').textContent = err.message; }
+    };
+  });
+  if (res === 'saved') { drawWeek(); toast('Đã lưu tiền phạt. Bấm Tính lại để cập nhật bảng lương.'); }
 }
 
 function qrBlock(q) {
@@ -303,6 +346,16 @@ function bindWeek(locked) {
       <div class="dlg-foot"><button class="btn" value="no">Thôi</button><button class="btn primary" value="yes">Mở khoá</button></div></form>`);
     if (ok === 'yes') busy(main, async () => { await call('unlock', state.friday); await renderWeek(); });
   };
+  const ap = $('#addPenalty');
+  if (ap) ap.onclick = () => editPenalty(null);
+  main.querySelectorAll('[data-pen-edit]').forEach((b) => { b.onclick = () => editPenalty(weekData.deductions.find((x) => x.id === Number(b.dataset.penEdit))); });
+  main.querySelectorAll('[data-pen-del]').forEach((b) => {
+    b.onclick = async () => {
+      const x = weekData.deductions.find((y) => y.id === Number(b.dataset.penDel));
+      const ok = await openDialog(`<form method="dialog"><div class="dlg-head"><h2>Xoá khoản phạt?</h2></div><div class="dlg-body"><p class="full" style="margin:0">${esc(x.sheet_name)}: −${money(x.amount)} ₫ (${esc(x.reason)})</p></div><div class="dlg-foot"><button class="btn" value="no">Thôi</button><button class="btn primary" value="yes">Xoá</button></div></form>`);
+      if (ok === 'yes') busy(main, async () => { weekData = await call('deleteDeduction', state.friday, x.id); drawWeek(); });
+    };
+  });
   main.querySelectorAll('input[data-tip]').forEach((inp) => {
     inp.onchange = () => busy(main, async () => { weekData = await call('setTip', state.friday, inp.dataset.tip, inp.value); drawWeek(); });
   });

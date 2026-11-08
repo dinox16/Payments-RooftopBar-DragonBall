@@ -1,7 +1,7 @@
 {
   "name": "tinh-luong",
   "productName": "Tinh Luong",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Ứng dụng tính lương tuần cho quán",
   "main": "main.js",
   "author": "Gia Khanh",

@@ -134,6 +134,11 @@ function calculateWeek(input) {
       if (s.status !== 'worked' || !t || !t.share) continue;
       lines.push({ shiftId: s.id, date: s.work_date, code: 'TIP', description: `${DAY_LABEL[s.day_code]} ${dm(s.work_date)} tip: ${money(t.amount)} chia ${t.workers} người`, quantity: 1, unit: t.share, amount: t.share });
     }
+    // Tiền phạt: số âm, trừ vào tổng nhận
+    for (const d of (input.deductionsByEmp || {})[emp.id] || []) {
+      const when = d.work_date ? `${DAY_LABEL[d.day_code] || ''} ${dm(d.work_date)} `.trimStart() : 'Cả tuần ';
+      lines.push({ shiftId: null, date: d.work_date || null, code: 'PENALTY', description: `${when}phạt: ${d.reason}`, quantity: 1, unit: -d.amount, amount: -d.amount, deductionId: d.id });
+    }
     const att = attendanceByEmp && attendanceByEmp[emp.id];
     if (att) {
       if (att.status === 'eligible') lines.push({ shiftId: null, date: att.cycleEnd, code: 'ATTENDANCE', description: `Chuyên cần chu kỳ ${dm(att.cycleStart)}–${dm(att.cycleEnd)} (nghỉ ${att.absent} ngày)`, quantity: 1, unit: att.amount, amount: att.amount });
@@ -141,6 +146,7 @@ function calculateWeek(input) {
     }
     const base = lines.filter((l) => l.code === 'BASE' || l.code === 'NIGHT').reduce((a, l) => a + l.amount, 0);
     const total = lines.reduce((a, l) => a + l.amount, 0);
+    if (total < 0) issues.push({ level: 'error', employeeId: emp.id, name: emp.sheet_name, message: `Tiền phạt lớn hơn tiền lương (còn ${money(total)}đ). Giảm tiền phạt hoặc trừ dần sang tuần sau.` });
     items.push({ employeeId: emp.id, name: emp.sheet_name, fullName: emp.full_name, workedMinutes, baseAmount: base, allowanceAmount: total - base, totalAmount: total, lines, attendance: att || null });
   }
   // gộp cảnh báo trùng

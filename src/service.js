@@ -267,6 +267,35 @@ class PayrollService {
     return this.importMatrix(friday, JSON.parse(last.raw_json), last.source, null);
   }
 
+  // ---------- Tiền phạt ----------
+  listDeductions(friday) {
+    const w = this.ensureWeek(friday);
+    return this.db.all('SELECT d.*, e.sheet_name FROM deductions d JOIN employees e ON e.id=d.employee_id WHERE d.work_week_id=? ORDER BY e.sheet_name COLLATE NOCASE, d.id', [w.id]);
+  }
+
+  /** d = { id?, employeeId, dayCode ('FRI'|'SAT'|'SUN'|'' = cả tuần), amount (đồng), reason } */
+  saveDeduction(friday, d) {
+    const w = this.ensureWeek(friday); this.assertEditable(w);
+    const amount = Math.round(Number(d.amount));
+    if (!(amount > 0)) throw new Error('Số tiền phạt phải lớn hơn 0');
+    const reason = String(d.reason || '').trim();
+    if (!reason) throw new Error('Cần ghi lý do phạt');
+    if (!this.db.get('SELECT 1 AS x FROM employees WHERE id=?', [d.employeeId])) throw new Error('Chọn nhân viên');
+    const day = d.dayCode ? weekDays(w.week_start).find((x) => x.code === d.dayCode) : null;
+    const vals = [d.employeeId, day ? day.date : null, amount, reason];
+    if (d.id) this.db.run('UPDATE deductions SET employee_id=?, work_date=?, amount=?, reason=? WHERE id=? AND work_week_id=?', [...vals, d.id, w.id]);
+    else this.db.run('INSERT INTO deductions(employee_id, work_date, amount, reason, work_week_id) VALUES (?,?,?,?,?)', [...vals, w.id]);
+    this.invalidateDraft(w.id);
+    return this.getWeek(friday);
+  }
+
+  deleteDeduction(friday, id) {
+    const w = this.ensureWeek(friday); this.assertEditable(w);
+    this.db.run('DELETE FROM deductions WHERE id=? AND work_week_id=?', [id, w.id]);
+    this.invalidateDraft(w.id);
+    return this.getWeek(friday);
+  }
+
   setShiftManual(friday, employeeId, dayCode, rawIn, rawOut) {
     const w = this.ensureWeek(friday); this.assertEditable(w);
     const d = weekDays(w.week_start).find((x) => x.code === dayCode);
@@ -333,7 +362,9 @@ class PayrollService {
       const amount = t ? t.amount : 0;
       return { code: d.code, label: d.label, date: d.date, amount, value: amount / unit, source: t ? t.source : null, workers, share: workers ? Math.round(amount / unit / workers) * unit : 0 };
     });
-    return { week: w, days, rows, tips, tipUnit: unit, tipCells: st.tip_cells, run: run ? this.loadRun(run.id) : null, exports, lastImport, settings: { sheet_link: w.sheet_link || st.sheet_link } };
+    const deductions = this.db.all('SELECT d.*, e.sheet_name FROM deductions d JOIN employees e ON e.id=d.employee_id WHERE d.work_week_id=? ORDER BY e.sheet_name COLLATE NOCASE, d.id', [w.id])
+      .map((x) => ({ ...x, day_code: (days.find((dd) => dd.date === x.work_date) || {}).code || '' }));
+    return { week: w, days, rows, tips, deductions, tipUnit: unit, tipCells: st.tip_cells, run: run ? this.loadRun(run.id) : null, exports, lastImport, settings: { sheet_link: w.sheet_link || st.sheet_link } };
   }
 
   // ---------- Tính lương ----------
@@ -388,7 +419,14 @@ class PayrollService {
       const d = weekDays(w.week_start).find((x) => x.code === t.day_code);
       tips[d.date] = { amount: t.amount, unit };
     }
-    return { employees: withShifts.sort((a, b) => a.sheet_name.localeCompare(b.sheet_name, 'vi')), shiftsByEmp, eventsByShift, rules, allowanceTypes, assignments, ratesByEmp, attendanceByEmp, tips };
+    const deductionsByEmp = {};
+    const wd = weekDays(w.week_start);
+    for (const d of this.db.all('SELECT * FROM deductions WHERE work_week_id=? ORDER BY id', [w.id])) {
+      (deductionsByEmp[d.employee_id] ||= []).push({ ...d, day_code: (wd.find((x) => x.date === d.work_date) || {}).code });
+      const e = emps.find((x) => x.id === d.employee_id);
+      if (e && !withShifts.includes(e)) withShifts.push(e);
+    }
+    return { employees: withShifts.sort((a, b) => a.sheet_name.localeCompare(b.sheet_name, 'vi')), shiftsByEmp, eventsByShift, rules, allowanceTypes, assignments, ratesByEmp, attendanceByEmp, tips, deductionsByEmp };
   }
 
   calculate(friday) {

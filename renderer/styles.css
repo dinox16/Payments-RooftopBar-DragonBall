@@ -178,3 +178,4 @@ legend { font-size: 12.5px; font-weight: 600; padding: 0 4px; }
 .tips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .tip .hint { margin-top: 4px; }
 .tip .m { font-size: 10.5px; background: #fff3d6; color: var(--warn); border-radius: 3px; padding: 0 4px; font-weight: 400; }
+.neg { color: var(--err); }

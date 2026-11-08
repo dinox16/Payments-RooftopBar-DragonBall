@@ -11,7 +11,7 @@ let win;
 const ALLOWED = new Set([
   'getSettings', 'saveSettings', 'listEmployees', 'saveEmployee', 'deleteEmployee', 'listBanks',
   'getWeek', 'setWeekClosed', 'syncFromGoogle', 'importFile', 'setShiftManual', 'setEvent',
-  'calculate', 'preflight', 'confirm', 'unlock', 'history', 'importAccounts', 'exportAccountTemplate', 'transferQrs', 'markPaid', 'addEmployeesAndReimport', 'setTip',
+  'calculate', 'preflight', 'confirm', 'unlock', 'history', 'importAccounts', 'exportAccountTemplate', 'transferQrs', 'markPaid', 'addEmployeesAndReimport', 'setTip', 'listDeductions', 'saveDeduction', 'deleteDeduction',
 ]);
 
 function dataDir() { return app.getPath('userData'); }

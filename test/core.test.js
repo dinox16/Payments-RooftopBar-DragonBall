@@ -104,7 +104,7 @@ test('tính lương: ca đêm, tiền ăn, xăng, Bảo 80k, sự kiện', async
   assert.equal(by(item('Giang')).NIGHT, undefined);
   assert.equal(by(item('Giang')).MEAL, 90000);
 
-  // An 18:00–22:30: tiền ăn 10k; mưa toàn thân 50k (không cộng 20k), bưng đồ 3×20k, tai nạn 20k
+  // An 18:00–22:30: tiền ăn 10k; mưa toàn thân 50k (không cộng 20k), bưng đồ 3×20k, sự cố 20k
   const c = by(item('An'));
   assert.equal(c.MEAL, 30000);
   assert.equal(c.RAIN_FULL, 50000);
@@ -261,4 +261,30 @@ test('tip: chia đều cho người đi làm trong ngày, làm tròn nghìn (32,
   const r2 = svc.importMatrix(FRI, m, 'test', null);
   assert.equal(r2.week.tips.find((t) => t.code === 'SUN').amount, 120000);
   assert.equal(r2.week.tips.find((t) => t.code === 'SUN').source, 'manual');
+});
+
+test('tiền phạt trừ vào tổng nhận; phạt lớn hơn lương thì chặn xác nhận', async () => {
+  const { svc } = await freshService();
+  for (const e of svc.listEmployees()) svc.saveEmployee({ ...e, hourly_rate: 25000 });
+  svc.importMatrix(FRI, SHEET, 'test', null);
+  const an = empId(svc, 'An');
+  const before = svc.calculate(FRI).run.items.find((i) => i.name === 'An').totalAmount;
+  svc.saveDeduction(FRI, { employeeId: an, dayCode: 'SAT', amount: 50000, reason: 'Đi trễ 30 phút' });
+  let w = svc.saveDeduction(FRI, { employeeId: an, dayCode: '', amount: 20000, reason: 'Làm vỡ ly' });
+  assert.equal(w.deductions.length, 2);
+  w = svc.calculate(FRI);
+  const it = w.run.items.find((i) => i.name === 'An');
+  assert.equal(it.totalAmount, before - 70000);
+  assert.deepEqual(it.lines.filter((l) => l.code === 'PENALTY').map((l) => l.amount).sort((a, b) => a - b), [-50000, -20000]);
+  // Bảo không đi làm nhưng bị phạt → tổng âm → lỗi chặn xác nhận
+  svc.saveDeduction(FRI, { employeeId: empId(svc, 'Bảo'), dayCode: '', amount: 100000, reason: 'Nghỉ không báo' });
+  w = svc.calculate(FRI);
+  assert.ok(w.run.issues.some((i) => i.level === 'error' && i.name === 'Bảo' && /lớn hơn tiền lương/.test(i.message)));
+  assert.ok(svc.preflight(FRI).errors.some((e) => e.startsWith('Bảo')));
+  // Xoá khoản phạt của Bảo
+  const bao = w.deductions.find((d) => d.sheet_name === 'Bảo');
+  svc.deleteDeduction(FRI, bao.id);
+  assert.equal(svc.calculate(FRI).run.issues.filter((i) => i.level === 'error').length, 0);
+  assert.throws(() => svc.saveDeduction(FRI, { employeeId: an, amount: 0, reason: 'x' }), /lớn hơn 0/);
+  assert.throws(() => svc.saveDeduction(FRI, { employeeId: an, amount: 10000, reason: ' ' }), /lý do/);
 });

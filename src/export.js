@@ -10,7 +10,7 @@ const { sumByCode } = require('./engine');
 const COLUMNS = [
   ['BASE', 'Lương giờ'], ['NIGHT', 'Ca 22h30–24h'], ['MEAL', 'Tiền ăn'], ['FUEL', 'Tiền xăng'],
   ['FIXED_DAILY', 'Cộng cố định'], ['RAIN_PARTIAL', 'Mưa ướt 1 phần'], ['RAIN_FULL', 'Mưa ướt toàn thân'],
-  ['CARRY', 'Bưng đồ'], ['INJURY', 'Tai nạn nhỏ'], ['TIP', 'Tip'], ['ATTENDANCE', 'Chuyên cần'],
+  ['CARRY', 'Bưng đồ'], ['INJURY', 'Sự cố'], ['PENALTY', 'Tiền phạt'], ['TIP', 'Tip'], ['ATTENDANCE', 'Chuyên cần'],
 ];
 const MONEY = '#,##0';
 
