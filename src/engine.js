@@ -69,14 +69,13 @@ function calculateWeek(input) {
   const { employees, shiftsByEmp, eventsByShift, rules, allowanceTypes, assignments, ratesByEmp, attendanceByEmp } = input;
   const items = [];
   const issues = [];
-  // Tip: tổng tip của ngày chia đều cho những người đi làm hôm đó, làm tròn theo đơn vị của sheet (nghìn đồng: 38,5 → 39)
+  // Tip: ô trên sheet (K15/L15/M15) đã là tiền tip MỖI NGƯỜI của ngày đó; ai đi làm hôm đó nhận đúng số này
   const tipShare = {};
   const tipInfo = [];
   for (const [date, t] of Object.entries(input.tips || {})) {
     if (!t || !(t.amount > 0)) continue;
     const workers = Object.values(shiftsByEmp).filter((list) => list.some((s) => s.work_date === date && s.status === 'worked')).length;
-    const unit = t.unit || 1000;
-    const share = workers ? Math.round(t.amount / unit / workers) * unit : 0;
+    const share = t.amount;
     tipShare[date] = { share, workers, amount: t.amount };
     tipInfo.push({ date, amount: t.amount, workers, share });
   }
@@ -132,7 +131,7 @@ function calculateWeek(input) {
     for (const s of shifts) {
       const t = tipShare[s.work_date];
       if (s.status !== 'worked' || !t || !t.share) continue;
-      lines.push({ shiftId: s.id, date: s.work_date, code: 'TIP', description: `${DAY_LABEL[s.day_code]} ${dm(s.work_date)} tip: ${money(t.amount)} chia ${t.workers} người`, quantity: 1, unit: t.share, amount: t.share });
+      lines.push({ shiftId: s.id, date: s.work_date, code: 'TIP', description: `${DAY_LABEL[s.day_code]} ${dm(s.work_date)} tip mỗi người`, quantity: 1, unit: t.share, amount: t.share });
     }
     // Tiền phạt: số âm, trừ vào tổng nhận
     for (const d of (input.deductionsByEmp || {})[emp.id] || []) {

@@ -240,26 +240,27 @@ test('người chưa có tài khoản hoặc nhận 0đ không có trong danh s�
   assert.ok(pn.includes('Giang'));
 });
 
-test('tip: chia đều cho người đi làm trong ngày, làm tròn nghìn (32,5 → 33)', async () => {
+test('tip: ô K15/L15/M15 là tiền tip mỗi người, ai đi làm ngày đó nhận đúng số đó', async () => {
   const { svc } = await freshService();
   for (const e of svc.listEmployees()) svc.saveEmployee({ ...e, hourly_rate: 25000 });
   const m = SHEET.map((r) => r.slice());
-  m[14] = [...m[14], '', '500', '390', '', '890']; // K15 = 500, L15 = 390, M15 trống, N15 = tổng (bỏ qua)
-  m[13] = [...m[13], '', '19', '20', '18'];        // dòng 14 khác, không đọc
+  m[14] = [...m[14], '', '39', '33', '', '72']; // K15 = 39 (nghìn/người T6), L15 = 33, M15 trống, N15 bỏ qua
+  m[13] = [...m[13], '', '19', '20', '18'];      // dòng 14 khác, không đọc
   const r = svc.importMatrix(FRI, m, 'test', null);
   assert.deepEqual(r.tipWarnings, []);
   const tips = Object.fromEntries(r.week.tips.map((t) => [t.code, t]));
-  assert.equal(tips.FRI.amount, 500000); assert.equal(tips.FRI.workers, 11); assert.equal(tips.FRI.share, 45000);
-  assert.equal(tips.SAT.amount, 390000); assert.equal(tips.SAT.workers, 12); assert.equal(tips.SAT.share, 33000);
+  assert.equal(tips.FRI.share, 39000); assert.equal(tips.FRI.workers, 11); assert.equal(tips.FRI.total, 429000);
+  assert.equal(tips.SAT.share, 33000); assert.equal(tips.SAT.workers, 12);
   assert.equal(tips.SUN.amount, 0);
   const w = svc.calculate(FRI);
   const tipOf = (n) => w.run.items.find((i) => i.name === n).lines.filter((l) => l.code === 'TIP').reduce((a, l) => a + l.amount, 0);
-  assert.equal(tipOf('An'), 45000 + 33000);
+  assert.equal(tipOf('An'), 39000 + 33000);
   assert.equal(tipOf('Lan'), 33000); // T6 off → không có tip T6
-  // Sửa tay tip CN = 120 (nghìn), đồng bộ lại không bị ghi đè
-  svc.setTip(FRI, 'SUN', '120');
+  assert.equal(tipOf('Bảo'), 0);     // không đi làm
+  // Sửa tay tip CN = 25 (nghìn/người), đồng bộ lại không bị ghi đè
+  svc.setTip(FRI, 'SUN', '25');
   const r2 = svc.importMatrix(FRI, m, 'test', null);
-  assert.equal(r2.week.tips.find((t) => t.code === 'SUN').amount, 120000);
+  assert.equal(r2.week.tips.find((t) => t.code === 'SUN').amount, 25000);
   assert.equal(r2.week.tips.find((t) => t.code === 'SUN').source, 'manual');
 });
 

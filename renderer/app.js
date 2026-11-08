@@ -215,11 +215,11 @@ function resultBlock(run, locked) {
 function tipBlock(d, locked) {
   const unitLabel = d.tipUnit === 1000 ? 'nghìn đồng' : d.tipUnit === 1 ? 'đồng' : `× ${money(d.tipUnit)}đ`;
   return `<div class="card"><div class="head" style="margin-bottom:8px"><h2 style="margin:0">Tiền tip</h2>
-    <span class="sub">Đọc từ ô ${esc(d.tipCells)} trên sheet (đơn vị ${unitLabel}), chia đều cho người đi làm trong ngày, làm tròn: 38,5 → 39.</span></div>
+    <span class="sub">Ô ${esc(d.tipCells)} trên sheet là tiền tip mỗi người của T6, T7, CN (đơn vị ${unitLabel}). Ai đi làm ngày đó nhận đúng số này.</span></div>
     <div class="tips">${d.tips.map((t) => `<div class="tip">
       <label class="f"><span>${t.label} ${dm(t.date)}${t.source === 'manual' ? ' <span class="m">sửa tay</span>' : ''}</span>
         <input type="number" step="0.5" min="0" data-tip="${t.code}" value="${t.amount ? t.value : ''}" placeholder="0" ${locked ? 'disabled' : ''}></label>
-      <div class="hint">${t.amount ? `${money(t.amount)} ₫ ÷ ${t.workers} người = <b>${money(t.share)} ₫</b>/người` : 'Không có tip'}</div></div>`).join('')}</div></div>`;
+      <div class="hint">${t.amount ? `<b>${money(t.share)} ₫</b>/người × ${t.workers} người đi làm = ${money(t.total)} ₫` : 'Không có tip'}</div></div>`).join('')}</div></div>`;
 }
 
 function penaltyBlock(d, locked) {
@@ -572,12 +572,12 @@ async function renderSettings() {
       <p class="hint">Với service account: chia sẻ sheet cho email trong file JSON (client_email) quyền Người xem.</p>
       <h2 style="margin-top:16px">Tiền tip trên sheet</h2>
       <div class="row">
-        <label class="f grow"><span>Ô tổng tip T6, T7, CN</span><input name="tip_cells" value="${esc(s.tip_cells || 'K15,L15,M15')}"></label>
+        <label class="f grow"><span>Ô tip mỗi người T6, T7, CN</span><input name="tip_cells" value="${esc(s.tip_cells || 'K15,L15,M15')}"></label>
         <label class="f"><span>1 trên sheet bằng</span><select name="tip_unit">
           <option value="1000" ${String(s.tip_unit) !== '1' ? 'selected' : ''}>1.000đ (nghìn đồng)</option>
           <option value="1" ${String(s.tip_unit) === '1' ? 'selected' : ''}>1đ (ghi đủ số)</option></select></label>
       </div>
-      <p class="hint">Vd. ô K15 ghi 500 → 500.000đ tip ngày T6, chia đều cho người đi làm T6.</p>
+      <p class="hint">Vd. ô K15 ghi 39 → mỗi người đi làm T6 nhận 39.000đ tip.</p>
     </div>
     <div class="card"><h2>Xuất file</h2>
       <label class="f"><span>Thư mục lưu file Excel</span><div class="row"><input class="grow" name="export_folder" value="${esc(s.export_folder)}" readonly><button type="button" class="btn" id="pickFolder">Chọn…</button></div></label>

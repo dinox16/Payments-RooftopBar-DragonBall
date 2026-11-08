@@ -360,7 +360,7 @@ class PayrollService {
       const t = tipRows.find((x) => x.day_code === d.code);
       const workers = rows.filter((r) => r.cells[d.code].status === 'worked').length;
       const amount = t ? t.amount : 0;
-      return { code: d.code, label: d.label, date: d.date, amount, value: amount / unit, source: t ? t.source : null, workers, share: workers ? Math.round(amount / unit / workers) * unit : 0 };
+      return { code: d.code, label: d.label, date: d.date, amount, value: amount / unit, source: t ? t.source : null, workers, share: amount, total: amount * workers };
     });
     const deductions = this.db.all('SELECT d.*, e.sheet_name FROM deductions d JOIN employees e ON e.id=d.employee_id WHERE d.work_week_id=? ORDER BY e.sheet_name COLLATE NOCASE, d.id', [w.id])
       .map((x) => ({ ...x, day_code: (days.find((dd) => dd.date === x.work_date) || {}).code || '' }));
