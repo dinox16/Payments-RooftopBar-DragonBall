@@ -289,3 +289,16 @@ test('tiền phạt trừ vào tổng nhận; phạt lớn hơn lương thì ch�
   assert.throws(() => svc.saveDeduction(FRI, { employeeId: an, amount: 0, reason: 'x' }), /lớn hơn 0/);
   assert.throws(() => svc.saveDeduction(FRI, { employeeId: an, amount: 10000, reason: ' ' }), /lý do/);
 });
+
+test('tiền xăng riêng từng nhân viên (vd. 30k/ngày), người khác vẫn mức chung', async () => {
+  const { svc } = await freshService();
+  for (const e of svc.listEmployees()) svc.saveEmployee({ ...e, hourly_rate: 25000 });
+  const nga = svc.listEmployees().find((e) => e.sheet_name === 'Nga');
+  svc.saveEmployee({ ...nga, rules: { ...nga.rules, FUEL: { amount_override: 30000 } } });
+  assert.equal(svc.listEmployees().find((e) => e.sheet_name === 'Nga').rules.FUEL.amount_override, 30000);
+  svc.importMatrix(FRI, SHEET, 'test', null);
+  const w = svc.calculate(FRI);
+  const fuel = (n) => w.run.items.find((i) => i.name === n).lines.filter((l) => l.code === 'FUEL').reduce((a, l) => a + l.amount, 0);
+  assert.equal(fuel('Nga'), 2 * 30000); // Nga đi T6, T7 (CN off)
+  assert.equal(fuel('An'), 3 * 10000);
+});

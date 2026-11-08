@@ -113,7 +113,11 @@ function calculateWeek(input) {
         const amt = long ? M.long_amount : M.short_amount;
         lines.push({ shiftId: s.id, date: s.work_date, code: 'MEAL', description: `${day} tiền ăn${long ? ' (vào 16h–17h hoặc ra 24h)' : ''}`, quantity: 1, unit: amt, amount: amt });
       }
-      if (rules.FUEL) lines.push({ shiftId: s.id, date: s.work_date, code: 'FUEL', description: `${day} tiền xăng`, quantity: 1, unit: rules.FUEL.amount, amount: rules.FUEL.amount });
+      if (rules.FUEL) {
+        // Tiền xăng riêng của nhân viên (trang Nhân viên) thay cho mức chung
+        const fuel = (assigned.FUEL && assigned.FUEL.amount_override) || rules.FUEL.amount;
+        lines.push({ shiftId: s.id, date: s.work_date, code: 'FUEL', description: `${day} tiền xăng`, quantity: 1, unit: fuel, amount: fuel });
+      }
       if (rules.FIXED_DAILY && assigned.FIXED_DAILY) {
         const amt = assigned.FIXED_DAILY.amount_override || rules.FIXED_DAILY.amount;
         lines.push({ shiftId: s.id, date: s.work_date, code: 'FIXED_DAILY', description: `${day} cộng cố định`, quantity: 1, unit: amt, amount: amt });

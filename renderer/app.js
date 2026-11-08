@@ -460,7 +460,7 @@ async function renderEmployees() {
         <td>${esc(e.full_name)}</td>
         <td class="num">${e.hourly_rate === null ? '<span class="missing">chưa nhập</span>' : money(e.hourly_rate)}</td>
         <td>${e.first_work_date ? dmy(e.first_work_date) : (e.rules.ATTENDANCE ? '<span class="missing">cần cho chuyên cần</span>' : '')}</td>
-        <td>${e.rules.NIGHT ? '<span class="tag">22h30–24h</span>' : ''}${e.rules.ATTENDANCE ? '<span class="tag">Chuyên cần</span>' : ''}${e.rules.FIXED_DAILY ? `<span class="tag">+${money(e.rules.FIXED_DAILY.amount_override || 80000)}/ngày</span>` : ''}</td>
+        <td>${e.rules.NIGHT ? '<span class="tag">22h30–24h</span>' : ''}${e.rules.ATTENDANCE ? '<span class="tag">Chuyên cần</span>' : ''}${e.rules.FIXED_DAILY ? `<span class="tag">+${money(e.rules.FIXED_DAILY.amount_override || 80000)}/ngày</span>` : ''}${e.rules.FUEL && e.rules.FUEL.amount_override ? `<span class="tag">Xăng ${money(e.rules.FUEL.amount_override)}/ngày</span>` : ''}</td>
         <td>${e.account ? `${esc(e.account.account_holder)}<br><span class="mono">${esc(e.account.account_number)}</span> · <span class="sub">${esc(e.account.bank_name)}</span>` : '<span class="missing">chưa có</span>'}</td>
         <td><button class="btn ghost" data-edit="${e.id}">Sửa</button></td></tr>`).join('')}</tbody></table></div>`;
   $('#addEmp').onclick = () => editEmployee(null);
@@ -498,6 +498,9 @@ async function editEmployee(e) {
         <label class="check"><input type="checkbox" name="r_att" ${e.rules.ATTENDANCE ? 'checked' : ''}> Chuyên cần 200.000 mỗi chu kỳ 4 tuần (nghỉ tối đa 1 ngày)</label>
         <label class="check"><input type="checkbox" name="r_fixed" ${e.rules.FIXED_DAILY ? 'checked' : ''}> Cộng cố định mỗi ngày đi làm:
           <input name="fixed_amt" type="number" step="1000" style="width:110px" value="${e.rules.FIXED_DAILY ? e.rules.FIXED_DAILY.amount_override || 80000 : 80000}"> ₫</label>
+        <label class="check">Tiền xăng riêng mỗi ngày đi làm:
+          <input name="fuel_amt" type="number" min="0" step="1000" style="width:110px" value="${e.rules.FUEL && e.rules.FUEL.amount_override ? e.rules.FUEL.amount_override : ''}" placeholder="mặc định"> ₫
+          <span class="hint">để trống = mức chung trong Cài đặt</span></label>
       </fieldset>
       <fieldset class="full"><legend>Tài khoản nhận lương</legend>
         <div class="dlg-body" style="padding:0">
@@ -519,6 +522,7 @@ async function editEmployee(e) {
       if (f.r_night.checked) rules.NIGHT = {};
       if (f.r_att.checked) rules.ATTENDANCE = {};
       if (f.r_fixed.checked) rules.FIXED_DAILY = { amount_override: Number(f.fixed_amt.value) || null };
+      if (Number(f.fuel_amt.value) > 0) rules.FUEL = { amount_override: Number(f.fuel_amt.value) };
       const hasAcc = f.holder.value.trim() || f.number.value.trim() || f.bank.value.trim();
       if (hasAcc && !banks.some((b) => b.name === f.bank.value.trim())) { d.querySelector('#empErr').textContent = 'Chọn ngân hàng đúng theo danh sách gợi ý (danh sách của mẫu chuyển khoản).'; return; }
       const payload = {
