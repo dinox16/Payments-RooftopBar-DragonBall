@@ -18,9 +18,12 @@ function rateOn(rates, date) {
 /**
  * Xét chuyên cần cho 1 nhân viên ở tuần `friday`.
  * getWeekInfo(friday) → { exists, closed, statusByDate: { 'YYYY-MM-DD': 'worked'|'off'|... } }
+ * overrides = { 'YYYY-MM-DD' (thứ 6): 'full' | 'not_full' } — admin tự tích cho tuần thiếu dữ liệu.
+ *   full = tuần đó đi làm đủ (0 ngày nghỉ); not_full = không đủ → mất chuyên cần chu kỳ đó.
  * Chu kỳ = 4 tuần quán mở cửa liên tiếp tính từ tuần có ngày đầu đi làm; tuần đóng cửa không đếm.
+ * Luôn trả về `weeks` (các tuần của chu kỳ hiện tại tới tuần này) để giao diện hiển thị.
  */
-function attendanceFor(employee, friday, params, getWeekInfo) {
+function attendanceFor(employee, friday, params, getWeekInfo, overrides = {}) {
   const cycleWeeks = params.cycle_weeks || 4;
   const maxAbsent = params.max_absent_days ?? 1;
   if (!employee.first_work_date) return { status: 'no_start', note: 'Chưa nhập ngày bắt đầu đi làm nên chưa xét chuyên cần' };
@@ -35,27 +38,33 @@ function attendanceFor(employee, friday, params, getWeekInfo) {
   }
   const idx = openWeeks.length - 1;
   const pos = idx % cycleWeeks;
-  if (pos !== cycleWeeks - 1) return { status: 'not_due', weekInCycle: pos + 1, cycleWeeks };
-  const cycle = openWeeks.slice(idx - cycleWeeks + 1, idx + 1);
-  let absent = 0;
-  const missing = [];
-  const absentDates = [];
-  for (const w of cycle) {
+  const cycle = openWeeks.slice(idx - pos, idx + 1);
+  const weeks = cycle.map((w) => {
     const info = w === friday ? current : getWeekInfo(w);
-    if (!info.exists) { missing.push(w); continue; }
+    const override = overrides[w] || null;
+    const r = { week: w, override, missing: false, absent: 0, absentDates: [] };
+    if (override) { r.absent = override === 'full' ? 0 : null; return r; }
+    if (!info.exists) { r.missing = true; return r; }
     for (let i = 0; i < 3; i++) {
       const d = addDays(w, i);
       if (d < employee.first_work_date) continue;
-      if ((info.statusByDate[d] || 'not_registered') !== 'worked') { absent++; absentDates.push(d); }
+      if ((info.statusByDate[d] || 'not_registered') !== 'worked') { r.absent++; r.absentDates.push(d); }
     }
-  }
+    return r;
+  });
   const cycleStart = cycle[0];
-  const cycleEnd = addDays(cycle[cycle.length - 1], 2);
+  const cycleEnd = addDays(cycle[0], 7 * (cycleWeeks - 1) + 2);
+  const base = { weekInCycle: pos + 1, cycleWeeks, cycleStart, cycleEnd, weeks };
+  if (pos !== cycleWeeks - 1) return { status: 'not_due', ...base };
+  const missing = weeks.filter((x) => x.missing).map((x) => x.week);
   if (missing.length) {
-    return { status: 'missing', weekInCycle: cycleWeeks, cycleWeeks, cycleStart, cycleEnd, missing, note: `Thiếu dữ liệu tuần ${missing.map(dm).join(', ')} nên chưa xét được chuyên cần` };
+    return { status: 'missing', ...base, cycleEnd: addDays(friday, 2), missing, note: `Thiếu dữ liệu tuần ${missing.map(dm).join(', ')}: tích Đủ hoặc Không đủ ở khung Chuyên cần` };
   }
-  const eligible = absent <= maxAbsent;
-  return { status: eligible ? 'eligible' : 'lost', weekInCycle: cycleWeeks, cycleWeeks, cycleStart, cycleEnd, absent, absentDates, eligible, amount: eligible ? params.amount : 0 };
+  const notFull = weeks.some((x) => x.override === 'not_full');
+  const absent = weeks.reduce((a, x) => a + (x.absent || 0), 0);
+  const absentDates = weeks.flatMap((x) => x.absentDates);
+  const eligible = !notFull && absent <= maxAbsent;
+  return { status: eligible ? 'eligible' : 'lost', ...base, cycleEnd: addDays(friday, 2), absent, absentDates, eligible, amount: eligible ? params.amount : 0 };
 }
 
 /**

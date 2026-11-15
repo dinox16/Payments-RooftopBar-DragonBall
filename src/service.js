@@ -364,7 +364,9 @@ class PayrollService {
     });
     const deductions = this.db.all('SELECT d.*, e.sheet_name FROM deductions d JOIN employees e ON e.id=d.employee_id WHERE d.work_week_id=? ORDER BY e.sheet_name COLLATE NOCASE, d.id', [w.id])
       .map((x) => ({ ...x, day_code: (days.find((dd) => dd.date === x.work_date) || {}).code || '' }));
-    return { week: w, days, rows, tips, deductions, tipUnit: unit, tipCells: st.tip_cells, run: run ? this.loadRun(run.id) : null, exports, lastImport, settings: { sheet_link: w.sheet_link || st.sheet_link } };
+    let attendance = [];
+    try { attendance = this.attendanceOverview(friday); } catch (_) { attendance = []; }
+    return { week: w, days, rows, tips, deductions, attendance, tipUnit: unit, tipCells: st.tip_cells, run: run ? this.loadRun(run.id) : null, exports, lastImport, settings: { sheet_link: w.sheet_link || st.sheet_link } };
   }
 
   // ---------- Tính lương ----------
@@ -386,6 +388,7 @@ class PayrollService {
     for (const r of this.db.all('SELECT * FROM employee_rates ORDER BY effective_from')) (ratesByEmp[r.employee_id] ||= []).push(r);
 
     const attendanceByEmp = {};
+    const attendanceAll = {};
     const cache = {};
     const getWeekInfo = (fri) => {
       if (cache[fri]) return cache[fri];
@@ -407,8 +410,10 @@ class PayrollService {
         }
         return statusCache[fri];
       };
+      const overrides = this.attendanceOverrides(e.id);
       const already = this.db.get("SELECT ap.* FROM attendance_periods ap JOIN payroll_runs r ON r.id=ap.paid_in_run_id WHERE ap.employee_id=? AND r.status='final' AND r.work_week_id<>?", [e.id, w.id]);
-      const res = attendanceFor(e, w.week_start, params, info);
+      const res = attendanceFor(e, w.week_start, params, info, overrides);
+      attendanceAll[e.id] = res;
       if (res.status === 'eligible' && already && already.cycle_start === res.cycleStart) continue;
       attendanceByEmp[e.id] = res;
       if (!withShifts.includes(e) && (res.status === 'eligible' || res.status === 'lost')) withShifts.push(e);
@@ -426,7 +431,34 @@ class PayrollService {
       const e = emps.find((x) => x.id === d.employee_id);
       if (e && !withShifts.includes(e)) withShifts.push(e);
     }
-    return { employees: withShifts.sort((a, b) => a.sheet_name.localeCompare(b.sheet_name, 'vi')), shiftsByEmp, eventsByShift, rules, allowanceTypes, assignments, ratesByEmp, attendanceByEmp, tips, deductionsByEmp };
+    return { employees: withShifts.sort((a, b) => a.sheet_name.localeCompare(b.sheet_name, 'vi')), shiftsByEmp, eventsByShift, rules, allowanceTypes, assignments, ratesByEmp, attendanceByEmp, attendanceAll, tips, deductionsByEmp };
+  }
+
+  // ---------- Chuyên cần: admin tích tuần thiếu dữ liệu ----------
+  attendanceOverrides(employeeId) {
+    const o = {};
+    for (const r of this.db.all('SELECT week_start, value FROM attendance_overrides WHERE employee_id=?', [employeeId])) o[r.week_start] = r.value;
+    return o;
+  }
+
+  /** Tình trạng chuyên cần của từng người được hưởng, ở tuần `friday`. */
+  attendanceOverview(friday) {
+    const w = this.ensureWeek(friday);
+    const input = this.buildInput(w, { attendanceOnly: true });
+    const emps = this.db.all("SELECT e.* FROM employees e JOIN employee_rule_assignments a ON a.employee_id=e.id AND a.rule_code='ATTENDANCE' WHERE e.is_active=1 ORDER BY e.sheet_name COLLATE NOCASE");
+    return emps.map((e) => ({ employeeId: e.id, name: e.sheet_name, firstWorkDate: e.first_work_date, ...(input.attendanceAll[e.id] || { status: 'no_start' }) }));
+  }
+
+  /** value: 'full' | 'not_full' | null (bỏ tích). weekStart = thứ 6 của tuần cần tích. */
+  setAttendanceOverride(friday, employeeId, weekStart, value) {
+    const w = this.ensureWeek(friday);
+    if (value && !['full', 'not_full'].includes(value)) throw new Error('Giá trị không hợp lệ');
+    const ws = fridayOf(weekStart);
+    if (value) this.db.run('INSERT INTO attendance_overrides(employee_id, week_start, value) VALUES (?,?,?) ON CONFLICT(employee_id, week_start) DO UPDATE SET value=excluded.value', [employeeId, ws, value]);
+    else this.db.run('DELETE FROM attendance_overrides WHERE employee_id=? AND week_start=?', [employeeId, ws]);
+    // Tuần chưa xác nhận nào có bảng lương nháp thì phải tính lại
+    for (const d of this.db.all("SELECT DISTINCT w.id FROM payroll_runs r JOIN work_weeks w ON w.id=r.work_week_id WHERE r.status='draft'")) this.invalidateDraft(d.id);
+    return this.getWeek(friday);
   }
 
   calculate(friday) {

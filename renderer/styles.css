@@ -185,3 +185,12 @@ legend { font-size: 12.5px; font-weight: 600; padding: 0 4px; }
 .tip .hint { margin-top: 4px; }
 .tip .m { font-size: 10.5px; background: #fff3d6; color: var(--warn); border-radius: 3px; padding: 0 4px; font-weight: 400; }
 .neg { color: var(--err); }
+
+/* Chuyên cần (bản 1.5) */
+.attweeks { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+.attw { display: flex; flex-direction: column; gap: 2px; min-width: 96px; }
+.attw small { color: var(--muted); font-size: 11.5px; }
+.attw select { padding: 3px 4px; font-size: 13px; }
+.attw select.att-miss { border-color: #e2b25a; background: #fff8e8; }
+.att-ok { color: var(--accent); font-weight: 600; font-size: 13px; padding: 3px 0; }
+.att-bad { color: var(--err); font-weight: 600; font-size: 13px; padding: 3px 0; }

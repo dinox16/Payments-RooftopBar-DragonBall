@@ -302,3 +302,35 @@ test('tiền xăng riêng từng nhân viên (vd. 30k/ngày), người khác v�
   assert.equal(fuel('Nga'), 2 * 30000); // Nga đi T6, T7 (CN off)
   assert.equal(fuel('An'), 3 * 10000);
 });
+
+test('chuyên cần: tuần thiếu dữ liệu → admin tích Đủ / Không đủ', async () => {
+  const { svc } = await freshService();
+  const phuong = empId(svc, 'Phương');
+  const chi = empId(svc, 'Chi');
+  for (const e of svc.listEmployees()) svc.saveEmployee({ ...e, hourly_rate: 25000, first_work_date: e.rules.ATTENDANCE ? '2026-10-16' : null });
+  // Chỉ có dữ liệu 2 tuần cuối của chu kỳ (30/10, 06/11); 16/10 và 23/10 trước khi dùng app
+  const full = (n) => [n, '6:00', '12:00', '6:00', '12:00', '6:00', '12:00'];
+  for (const wk of ['2026-10-30', '2026-11-06']) svc.importMatrix(wk, [SHEET[0], SHEET[1], full('Phương'), full('Chi'), full('Tâm')], 'test', null);
+  let w = svc.calculate(FRI);
+  let ov = w.attendance.find((a) => a.name === 'Phương');
+  assert.equal(ov.status, 'missing');
+  assert.deepEqual(ov.weeks.map((x) => [x.week, x.missing]), [['2026-10-16', true], ['2026-10-23', true], ['2026-10-30', false], ['2026-11-06', false]]);
+  assert.ok(w.run.issues.some((i) => i.name === 'Phương' && /tích Đủ hoặc Không đủ/.test(i.message)));
+  // Admin tích: Phương đủ cả 2 tuần; Chi đủ 1 tuần, không đủ 1 tuần
+  svc.setAttendanceOverride(FRI, phuong, '2026-10-16', 'full');
+  svc.setAttendanceOverride(FRI, phuong, '2026-10-23', 'full');
+  svc.setAttendanceOverride(FRI, chi, '2026-10-16', 'full');
+  w = svc.setAttendanceOverride(FRI, chi, '2026-10-23', 'not_full');
+  assert.equal(w.run, null); // bảng lương nháp bị huỷ, phải tính lại
+  w = svc.calculate(FRI);
+  const att = (n) => w.run.items.find((i) => i.name === n).lines.find((l) => l.code === 'ATTENDANCE');
+  assert.equal(att('Phương').amount, 200000);
+  assert.equal(att('Chi'), undefined);
+  assert.equal(w.attendance.find((a) => a.name === 'Chi').status, 'lost');
+  // Bỏ tích → lại thiếu dữ liệu
+  svc.setAttendanceOverride(FRI, phuong, '2026-10-23', null);
+  assert.equal(svc.calculate(FRI).attendance.find((a) => a.name === 'Phương').status, 'missing');
+  // Tuần giữa chu kỳ: hiện tiến độ
+  const mid = svc.getWeek('2026-10-30').attendance.find((a) => a.name === 'Phương');
+  assert.equal(mid.status, 'not_due'); assert.equal(mid.weekInCycle, 3);
+});

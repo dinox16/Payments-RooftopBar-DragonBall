@@ -163,6 +163,15 @@ CREATE TABLE IF NOT EXISTS deductions (
   created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS attendance_overrides (
+  id          INTEGER PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  week_start  TEXT NOT NULL,                 -- thứ 6 của tuần
+  value       TEXT NOT NULL CHECK (value IN ('full','not_full')),
+  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (employee_id, week_start)
+);
+
 CREATE TABLE IF NOT EXISTS banks (
   id    INTEGER PRIMARY KEY,
   name  TEXT NOT NULL UNIQUE,

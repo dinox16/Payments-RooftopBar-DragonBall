@@ -127,6 +127,8 @@ function drawWeek() {
 
     ${w.is_closed ? '' : penaltyBlock(d, locked)}
 
+    ${w.is_closed ? '' : attendanceBlock(d, locked)}
+
 
     ${w.is_closed ? '<div class="card empty">Tuần này được đánh dấu quán đóng cửa: không tính lương và không đếm vào chu kỳ chuyên cần.</div>' : `
     <div class="head" style="margin-bottom:8px">
@@ -234,6 +236,34 @@ function penaltyBlock(d, locked) {
       ${list.map((x) => `<tr><td><b>${esc(x.sheet_name)}</b></td><td>${dayLabel(x)}</td><td>${esc(x.reason)}</td><td class="num neg">−${money(x.amount)}</td>
         <td>${locked ? '' : `<button class="btn ghost" data-pen-edit="${x.id}">Sửa</button><button class="btn ghost danger" data-pen-del="${x.id}">Xoá</button>`}</td></tr>`).join('')}
     </tbody></table>` : ''}</div>`;
+}
+
+function attendanceBlock(d, locked) {
+  const list = d.attendance || [];
+  if (!list.length) return '';
+  const row = (a) => {
+    let info = '';
+    if (a.status === 'no_start') info = '<span class="note-warn">Chưa nhập ngày bắt đầu đi làm (trang Nhân viên)</span>';
+    else if (a.status === 'not_started') info = '<span class="sub">Chưa tới ngày bắt đầu đi làm</span>';
+    else if (a.status === 'closed_week') info = '<span class="sub">Tuần đóng cửa, không tính</span>';
+    else info = `<span class="sub">Tuần ${a.weekInCycle}/${a.cycleWeeks} · chu kỳ từ ${dm(a.cycleStart)}</span>`;
+    const weeks = (a.weeks || []).map((x) => {
+      let v;
+      if (x.missing || x.override) {
+        v = `<select data-att="${a.employeeId}" data-week="${x.week}" class="${x.missing ? 'att-miss' : ''}" ${locked ? 'disabled' : ''}>
+          <option value="">Thiếu dữ liệu</option>
+          <option value="full" ${x.override === 'full' ? 'selected' : ''}>Đủ</option>
+          <option value="not_full" ${x.override === 'not_full' ? 'selected' : ''}>Không đủ</option></select>`;
+      } else v = x.absent ? `<span class="att-bad">Nghỉ ${x.absent} ngày</span>` : '<span class="att-ok">Đủ</span>';
+      return `<div class="attw"><small>${dm(x.week)}</small>${v}</div>`;
+    }).join('');
+    const res = a.status === 'eligible' ? `<span class="pill ok">Được ${money(a.amount)} ₫</span>`
+      : a.status === 'lost' ? '<span class="pill err">Mất chuyên cần</span>'
+      : a.status === 'missing' ? '<span class="pill warn">Cần tích tuần thiếu</span>' : '';
+    return `<tr><td style="width:150px"><b>${esc(a.name)}</b></td><td>${info}<div class="attweeks">${weeks}</div></td><td class="num" style="width:180px">${res}</td></tr>`;
+  };
+  return `<div class="card"><div class="head" style="margin-bottom:8px"><h2 style="margin:0">Chuyên cần</h2></div>
+    <table><tbody>${list.map(row).join('')}</tbody></table></div>`;
 }
 
 async function editPenalty(x) {
@@ -366,6 +396,13 @@ function bindWeek(locked) {
       <div class="dlg-foot"><button class="btn" value="no">Thôi</button><button class="btn primary" value="yes">Mở khoá</button></div></form>`);
     if (ok === 'yes') busy(main, async () => { await call('unlock', state.friday); await renderWeek(); });
   };
+  main.querySelectorAll('select[data-att]').forEach((sel) => {
+    sel.onchange = () => busy(main, async () => {
+      weekData = await call('setAttendanceOverride', state.friday, Number(sel.dataset.att), sel.dataset.week, sel.value || null);
+      drawWeek();
+      if (!weekData.run) toast('Đã lưu. Bấm Tính lương để cập nhật chuyên cần.');
+    });
+  });
   const ap = $('#addPenalty');
   if (ap) ap.onclick = () => editPenalty(null);
   main.querySelectorAll('[data-pen-edit]').forEach((b) => { b.onclick = () => editPenalty(weekData.deductions.find((x) => x.id === Number(b.dataset.penEdit))); });
