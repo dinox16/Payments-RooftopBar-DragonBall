@@ -110,6 +110,8 @@ function drawWeek() {
       <label class="toggle"><input type="checkbox" id="closed" ${w.is_closed ? 'checked' : ''} ${locked ? 'disabled' : ''}> Tuần này quán đóng cửa (lễ, Tết)</label>
     </div>
 
+    ${locked && d.qrs ? qrBlock(d.qrs) : ''}
+
     <div class="card" ${w.is_closed ? 'hidden' : ''}>
       <h2>Lấy dữ liệu ca từ Google Sheet</h2>
       <div class="row">
@@ -125,7 +127,6 @@ function drawWeek() {
 
     ${w.is_closed ? '' : penaltyBlock(d, locked)}
 
-    ${locked && d.qrs ? qrBlock(d.qrs) : ''}
 
     ${w.is_closed ? '<div class="card empty">Tuần này được đánh dấu quán đóng cửa: không tính lương và không đếm vào chu kỳ chuyên cần.</div>' : `
     <div class="head" style="margin-bottom:8px">
@@ -263,17 +264,36 @@ async function editPenalty(x) {
   if (res === 'saved') { drawWeek(); toast('Đã lưu tiền phạt. Bấm Tính lại để cập nhật bảng lương.'); }
 }
 
+// Quét QR theo luồng: mỗi lần chỉ hiện 1 người chưa chuyển; đánh dấu xong thì ẩn đi, người kế tiếp hiện lên
+function qrQueue(q) {
+  const all = [...q.items, ...(q.cash || []).map((c) => ({ ...c, cash: true }))].filter((x) => !x.paidAt);
+  const skipped = state.qrSkip || [];
+  return [...all.filter((x) => !skipped.includes(x.employeeId)), ...skipped.map((id) => all.find((x) => x.employeeId === id)).filter(Boolean)];
+}
+
 function qrBlock(q) {
-  return `<div class="head" style="margin-bottom:8px"><h2 style="margin:0">Chuyển khoản bằng mã QR</h2>
-      <span class="pill ${q.paid === q.total ? 'ok' : 'warn'}">Đã chuyển ${q.paid}/${q.total}</span>
-      <span class="sub">Mở app ngân hàng, quét mã: số tiền và nội dung đã điền sẵn. Kiểm tra tên người nhận trước khi xác nhận.</span>
-      <div class="spacer"></div>${q.paid < q.total ? '<button class="btn" id="paidAll">Đánh dấu tất cả đã chuyển</button>' : ''}</div>
-    <div class="qrgrid">${q.items.map((x) => `<div class="qrcard ${x.paidAt ? 'paid' : ''}">
-      ${x.qr ? `<img src="${x.qr}" alt="QR ${esc(x.name)}" data-zoom="${x.employeeId}">` : `<div class="qrerr">${esc(x.error)}</div>`}
-      <div class="qrinfo"><b>${esc(x.name)}</b><span class="amt">${money(x.amount)} ₫</span>
-        <small>${esc(x.holder || '')}</small><small class="mono">${esc(x.accountNumber || '')}</small><small>${esc(x.bankName || '')}</small>
-        <button class="btn ${x.paidAt ? '' : 'primary'}" data-paid="${x.employeeId}" data-v="${x.paidAt ? 0 : 1}">${x.paidAt ? '✓ Đã chuyển' : 'Đánh dấu đã chuyển'}</button></div></div>`).join('')}</div>
-    ${q.cash && q.cash.length ? `<div class="card"><h2>Trả riêng (chưa có tài khoản ngân hàng)</h2><table><tbody>${q.cash.map((x) => `<tr class="${x.paidAt ? 'dim' : ''}"><td><b>${esc(x.name)}</b></td><td class="num">${money(x.amount)} ₫</td><td style="width:170px"><button class="btn ${x.paidAt ? '' : 'primary'}" data-paid="${x.employeeId}" data-v="${x.paidAt ? 0 : 1}">${x.paidAt ? '✓ Đã trả' : 'Đánh dấu đã trả'}</button></td></tr>`).join('')}</tbody></table></div>` : ''}`;
+  const queue = qrQueue(q);
+  const cur = queue[0];
+  const pct = q.total ? Math.round((q.paid / q.total) * 100) : 100;
+  const head = `<div class="qrflow-head"><h2>Chuyển khoản</h2><span class="pill ${q.paid === q.total ? 'ok' : 'warn'}">${q.paid}/${q.total}</span>
+    <div class="spacer"></div>
+    ${state.qrLast ? '<button class="btn ghost" id="qrUndo">Hoàn tác</button>' : ''}
+    ${queue.length > 1 ? '<button class="btn ghost" id="paidAll">Đã chuyển hết</button>' : ''}</div>
+    <div class="qrbar"><span style="width:${pct}%"></span></div>`;
+  if (!cur) return `<div class="card qrflow">${head}<div class="qrdone">✓ Đã chuyển đủ ${q.total} người</div></div>`;
+  const pic = cur.cash
+    ? '<div class="qrbig qrcash">Tiền mặt</div>'
+    : cur.qr ? `<img class="qrbig" src="${cur.qr}" alt="QR ${esc(cur.name)}" data-zoom="${cur.employeeId}">` : `<div class="qrbig qrerr">${esc(cur.error)}</div>`;
+  return `<div class="card qrflow">${head}
+    <div class="qrflow-body">${pic}
+      <div class="qrwho">
+        <div class="qrname">${esc(cur.name)}</div>
+        <div class="qramt">${money(cur.amount)} ₫</div>
+        ${cur.cash ? '' : `<div class="qracc">${esc(cur.holder || '')}</div><div class="qracc mono">${esc(cur.accountNumber || '')}</div><div class="qracc">${esc(cur.bankName || '')}</div>`}
+        <div class="qrbtns"><button class="btn primary big" id="qrNext" data-id="${cur.employeeId}">✓ Đã chuyển${queue.length > 1 ? ' → tiếp theo' : ''}</button>
+          ${queue.length > 1 ? `<button class="btn" id="qrSkip" data-id="${cur.employeeId}">Bỏ qua</button>` : ''}</div>
+      </div>
+    </div></div>`;
 }
 
 function actionBar(d, locked) {
@@ -296,10 +316,10 @@ function actionBar(d, locked) {
 }
 
 function bindWeek(locked) {
-  const move = (n) => { state.friday = addDays(weekData.week.week_start, n); state.openRows.clear(); renderWeek(); };
+  const move = (n) => { state.friday = addDays(weekData.week.week_start, n); state.openRows.clear(); state.qrSkip = []; state.qrLast = null; renderWeek(); };
   $('#prevW').onclick = () => move(-7);
   $('#nextW').onclick = () => move(7);
-  $('#pickW').onchange = (e) => { if (e.target.value) { state.friday = fridayOf(e.target.value); renderWeek(); } };
+  $('#pickW').onchange = (e) => { if (e.target.value) { state.friday = fridayOf(e.target.value); state.qrSkip = []; state.qrLast = null; renderWeek(); } };
   $('#closed').onchange = (e) => busy(main, async () => { weekData = await call('setWeekClosed', state.friday, e.target.checked); drawWeek(); });
   const hide = $('#hideEmpty'); if (hide) hide.onchange = (e) => { state.hideEmpty = e.target.checked; drawWeek(); };
 
@@ -359,15 +379,23 @@ function bindWeek(locked) {
   main.querySelectorAll('input[data-tip]').forEach((inp) => {
     inp.onchange = () => busy(main, async () => { weekData = await call('setTip', state.friday, inp.dataset.tip, inp.value); drawWeek(); });
   });
-  main.querySelectorAll('[data-paid]').forEach((b) => {
-    b.onclick = () => busy(null, async () => { weekData.qrs = await call('markPaid', state.friday, Number(b.dataset.paid), b.dataset.v === '1'); await renderWeek(); });
+  const qn = $('#qrNext');
+  if (qn) qn.onclick = () => busy(main, async () => {
+    const id = Number(qn.dataset.id);
+    await call('markPaid', state.friday, id, true);
+    state.qrLast = id; state.qrSkip = (state.qrSkip || []).filter((x) => x !== id);
+    await renderWeek();
   });
+  const qs = $('#qrSkip');
+  if (qs) qs.onclick = () => { const id = Number(qs.dataset.id); state.qrSkip = [...(state.qrSkip || []).filter((x) => x !== id), id]; drawWeek(); };
+  const qu = $('#qrUndo');
+  if (qu) qu.onclick = () => busy(main, async () => { await call('markPaid', state.friday, state.qrLast, false); state.qrSkip = []; state.qrLast = null; await renderWeek(); });
   const pa = $('#paidAll');
-  if (pa) pa.onclick = () => busy(main, async () => { await call('markPaid', state.friday, null, true); await renderWeek(); });
+  if (pa) pa.onclick = () => busy(main, async () => { await call('markPaid', state.friday, null, true); state.qrLast = null; await renderWeek(); });
   main.querySelectorAll('[data-zoom]').forEach((img) => {
     img.onclick = () => {
       const x = weekData.qrs.items.find((i) => i.employeeId === Number(img.dataset.zoom));
-      openDialog(`<form method="dialog"><div class="dlg-head"><h2>${esc(x.name)} · ${money(x.amount)} ₫</h2><div class="sub">${esc(x.holder)} · ${esc(x.accountNumber)} · ${esc(x.bankName)} · ${esc(x.remark)}</div></div>
+      openDialog(`<form method="dialog"><div class="dlg-head"><h2>${esc(x.name)} · ${money(x.amount)} ₫</h2></div>
         <div class="dlg-body"><img class="full" style="width:100%;max-width:420px;margin:auto;image-rendering:pixelated" src="${x.qr}"></div>
         <div class="dlg-foot"><button class="btn primary" value="ok">Đóng</button></div></form>`);
     };

@@ -156,18 +156,24 @@ legend { font-size: 12.5px; font-weight: 600; padding: 0 4px; }
 .toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
 .busy { opacity: .6; pointer-events: none; }
 
-/* Mã QR chuyển khoản (bản 1.1) */
-.qrgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; margin-bottom: 18px; }
-.qrcard { display: flex; gap: 12px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
-.qrcard img { width: 150px; height: 150px; cursor: zoom-in; flex: none; }
-.qrcard.paid { background: #f3faf6; border-color: #b9e0cf; }
-.qrcard.paid img { opacity: .35; }
-.qrinfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.qrinfo b { font-size: 15px; }
-.qrinfo .amt { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.qrinfo small { color: var(--muted); overflow-wrap: anywhere; }
-.qrinfo .btn { margin-top: auto; align-self: flex-start; }
-.qrerr { width: 150px; height: 150px; display: grid; place-items: center; text-align: center; color: var(--err); background: var(--err-soft); border-radius: 6px; font-size: 12.5px; padding: 8px; flex: none; }
+/* Quét QR theo luồng (bản 1.4) */
+.qrflow { padding: 18px 20px; }
+.qrflow-head { display: flex; align-items: center; gap: 10px; }
+.qrflow-head h2 { margin: 0; }
+.qrflow-head .spacer { flex: 1; }
+.qrbar { height: 4px; background: var(--line); border-radius: 2px; margin: 12px 0 18px; overflow: hidden; }
+.qrbar span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.qrflow-body { display: flex; gap: 28px; align-items: center; }
+.qrbig { width: 280px; height: 280px; flex: none; cursor: zoom-in; border: 1px solid var(--line); border-radius: 8px; }
+.qrwho { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.qrname { font-size: 24px; font-weight: 700; }
+.qramt { font-size: 34px; font-weight: 750; font-variant-numeric: tabular-nums; color: var(--accent); margin-bottom: 6px; }
+.qracc { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+.qrbtns { display: flex; gap: 10px; margin-top: 18px; }
+.qrerr, .qrcash { display: grid; place-items: center; text-align: center; padding: 16px; cursor: default; }
+.qrerr { color: var(--err); background: var(--err-soft); }
+.qrcash { color: var(--warn); background: var(--warn-soft); font-size: 22px; font-weight: 700; }
+.qrdone { text-align: center; padding: 30px 0 18px; font-size: 18px; font-weight: 650; color: var(--accent); }
 
 /* Thanh cập nhật */
 .updatebar { position: fixed; top: 14px; right: 24px; z-index: 30; display: flex; gap: 10px; align-items: center; background: #fff; border: 1px solid #b9e0cf; box-shadow: 0 8px 30px rgba(0,0,0,.15); border-radius: 8px; padding: 10px 14px; font-size: 13.5px; }
